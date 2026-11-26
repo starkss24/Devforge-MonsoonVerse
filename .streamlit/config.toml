@@ -1,0 +1,14 @@
+# Read by `streamlit run dashboard/app.py` when started from the repo root (Streamlit looks in ./.streamlit).
+[client]
+toolbarMode = "viewer"        # no Deploy button / developer menu on the projector
+showErrorDetails = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#0b6e99"      # one accent: monsoon blue
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f2f6f9"
+textColor = "#1a2a33"

@@ -123,6 +123,84 @@ def test_diff_map_symmetric_and_animation_frames():
     assert anim.layout.updatemenus and anim.layout.sliders
 
 
+def test_diff_map_no_change_is_clean_and_annotated():
+    z = np.zeros((32, 36))
+    fig = plots.diff_map(z, LATS, LONS, "d", "Δ mm/day", empty_text="No change in tp on day 3")
+    hm = fig.data[0]
+    assert (hm.zmin, hm.zmax, hm.zmid) == (-1.0, 1.0, 0.0)          # fixed range, no "1n" colourbar
+    assert any(a.text == "No change in tp on day 3" for a in fig.layout.annotations)
+    small = z.copy()
+    small[3, 3] = 0.5
+    fig2 = plots.diff_map(small, LATS, LONS, "d", "K", empty_text="No change")
+    assert fig2.data[0].zmax == 0.5 and not fig2.layout.annotations  # real change: no note, own range
+    assert plots.diff_animation(np.zeros((10, 32, 36)), LATS, LONS, "Δ", "K").data[0].zmax == 1.0
+
+
+def test_field_map_coast_colorbar_and_places():
+    mask = (np.add.outer(np.zeros_like(LATS), LONS) < 80).astype(float)   # land west of 80°E
+    f = np.random.default_rng(1).normal(size=(32, 36))
+    fig = plots.field_map(f, LATS, LONS, "t", "K", coast=mask, colorbar="bottom", places=True)
+    coast = [t for t in fig.data if t.type == "contour"]
+    assert len(coast) == 1 and coast[0].contours.start == coast[0].contours.end == 0.5
+    assert coast[0].contours.coloring == "none" and coast[0].showscale is False
+    cb = fig.data[0].colorbar
+    assert cb.orientation == "h" and cb.title.text == "K" and cb.thickness <= 12
+    texts = " ".join(a.text for a in fig.layout.annotations)
+    assert "Arabian Sea" in texts and "Bay of Bengal" in texts
+    assert fig.layout.yaxis.scaleanchor == "x" and fig.layout.xaxis.title.text is None
+    # diff_map forwards the extras (other tabs pass coast= to it)
+    d = plots.diff_map(f, LATS, LONS, "d", "K", coast=mask)
+    assert any(t.type == "contour" for t in d.data)
+    assert plots.add_coast(plots.field_map(f, LATS, LONS, "t", "K"), None, LATS, LONS).data[-1].type == "heatmap"
+
+
+def _arrow_extent(fig):
+    tr = next(t for t in fig.data if t.name == "wind")
+    xs = np.array([x for x in tr.x if x is not None], dtype=float)
+    return xs.max() - xs.min(), tr
+
+
+def test_wind_ref_fixed_scale_and_key():
+    strong = (np.full((32, 36), 10.0), np.zeros((32, 36)))
+    weak = (np.full((32, 36), 5.0), np.zeros((32, 36)))
+    f = np.zeros((32, 36))
+    # auto scale: weak and strong look the same; fixed scale: weak arrows are half as long
+    a_s = plots.field_map(f, LATS, LONS, "t", "K", wind=strong)
+    a_w = plots.field_map(f, LATS, LONS, "t", "K", wind=weak)
+    tr_s = next(t for t in a_s.data if t.name == "wind")
+    tr_w = next(t for t in a_w.data if t.name == "wind")
+    assert np.allclose([x for x in tr_s.x if x is not None], [x for x in tr_w.x if x is not None])
+    r_s = plots.field_map(f, LATS, LONS, "t", "K", wind=strong, wind_ref=10, wind_stride=4)
+    r_w = plots.field_map(f, LATS, LONS, "t", "K", wind=weak, wind_ref=10, wind_stride=4)
+    seg = lambda fig: next(t for t in fig.data if t.name == "wind").x[1] - next(t for t in fig.data if t.name == "wind").x[0]
+    assert seg(r_s) == pytest.approx(2 * seg(r_w)) and seg(r_s) == pytest.approx(0.6 * 4)
+    assert any(t.name == "wind_key" for t in r_s.data)
+    assert any("10 m/s" in a.text for a in r_s.layout.annotations)
+    tr = next(t for t in r_s.data if t.name == "wind")
+    assert tr.line.width < 1.5 and "0.55" in tr.line.color      # thin, semi-transparent
+    n_arrows = sum(1 for x in tr.x if x is None) // 3
+    assert n_arrows == len(LATS[::4]) * len(LONS[::4])
+
+
+def test_status_pill_and_server_url_env(monkeypatch):
+    ok = sidebar.status_pill({"model_name": "twin-<v1>", "backend": "onnx"})
+    assert "Server ready" in ok and "twin-&lt;v1&gt;" in ok and "mm-ok" in ok
+    down = sidebar.status_pill(None, "connection refused")
+    assert "Server down" in down and "mm-down" in down
+    monkeypatch.delenv(sidebar.SERVER_ENV, raising=False)
+    assert sidebar.default_server_url() == sidebar.client.DEFAULT_URL
+    monkeypatch.setenv(sidebar.SERVER_ENV, "http://127.0.0.1:8071")
+    assert sidebar.default_server_url() == "http://127.0.0.1:8071"
+
+
+def test_shock_cells_and_preset_channels():
+    import tab_maps
+    last = np.full(STATE_SHAPE, 50.0)
+    assert tab_maps.shock_cells(None) == 0
+    assert tab_maps.shock_cells(make_shock("warm_ocean", last)) == box_mask(*BOXES["warm_ocean"]).sum()
+    assert sidebar.SHOCK_CHANNEL == {"warm_ocean": "t2m", "monsoon_stall": "u10"}
+
+
 # ---------- AppTest (headless app) ----------
 def _free_port() -> int:
     with socket.socket() as s:
@@ -164,8 +242,10 @@ def test_app_live_warm_ocean_run(live_server):
     at = _apptest().run()
     assert not at.exception
     assert any("Run the twin" in i.value for i in at.info)  # instructions before the first run
+    assert at.selectbox(key="channel").value == "tp"
     at.text_input(key="server_url").set_value(live_server).run()
     at.radio(key="shock_preset").set_value("warm_ocean").run()
+    assert at.selectbox(key="channel").value == "t2m"   # display follows the shocked channel
     at.button(key="run_button").click().run()
     assert not at.exception, at.exception
     assert not at.error, [e.value for e in at.error]
@@ -174,14 +254,17 @@ def test_app_live_warm_ocean_run(live_server):
     assert np.abs(run.shocked - run.base).max() > 0
     charts = at.get("plotly_chart")
     assert len(charts) >= 3
-    # channel/day change re-slices without a new server call
-    at.selectbox(key="channel").set_value("t2m").run()
+    assert any("How to read this" in c.value for c in at.caption)
+    # channel/day change re-slices without a new server call; the user's channel choice sticks
+    at.selectbox(key="channel").set_value("tp").run()
     at.slider(key="lead_day").set_value(5).run()
     assert not at.exception and at.session_state["run"] is run
+    assert at.selectbox(key="channel").value == "tp"
     assert not any("Press Run to update" in w.value for w in at.warning)
-    # shock change -> stale warning
+    # shock change -> stale warning, display switches to the newly shocked channel
     at.radio(key="shock_preset").set_value("monsoon_stall").run()
     assert any("Press Run to update" in w.value for w in at.warning)
+    assert at.selectbox(key="channel").value == "u10"
 
 
 @pytest.mark.skipif(not HAVE_DATA, reason="data/india_climate_train.nc not present")

@@ -14,12 +14,12 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from common import CHANNELS
+from tab_shocklab import BAD, CHANNEL_COLORS, CHART_H, GOOD, NO_BAR, style_chart
 
 ROOT = Path(__file__).resolve().parent.parent
 SCORES = ROOT / "eval" / "scores.csv"
 SUMMARY = ROOT / "eval" / "scores_summary.json"
 GEN_CMD = "python -m eval.score --data data/india_climate_train.nc --stats data/stats.json --twin"
-COLORS = ["#257de0", "#f47230", "#00b894", "#f2a600", "#ee7fac", "#008a17"]   # fixed categorical order
 BAND = (0.40, 2.5)
 
 
@@ -35,10 +35,33 @@ def load_scores(path: Path = SCORES) -> list[dict]:
         return list(csv.DictReader(fh))
 
 
-def _layout(fig, title, yt, height=340):
-    fig.update_layout(title=title, height=height, margin=dict(l=10, r=10, t=50, b=10), yaxis_title=yt,
-                      legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0), barmode="group")
+def _layout(fig, title, yt, height=CHART_H):
+    fig = style_chart(fig, title, "", yt, height)
+    fig.update_layout(barmode="group", bargap=0.25, bargroupgap=0.08)
     return fig
+
+
+def scorecard(rows: list[dict], leads=(1, 4, 8)) -> list[dict]:
+    """Per lead day: mean over channels of skill vs the better reference (`ss`, what the judge scores)."""
+    out = []
+    for lead in leads:
+        vals = [_f(r.get("ss")) for r in rows if int(r["lead"]) == lead]
+        vals = [v for v in vals if v == v]
+        if vals:
+            out.append({"lead": lead, "skill": sum(vals) / len(vals), "n": len(vals)})
+    return out
+
+
+def _tile(label: str, value: str, sub: str, color: str) -> str:
+    return (f'<div style="border:1px solid rgba(128,128,128,0.3);border-left:6px solid {color};border-radius:8px;'
+            f'padding:10px 14px;height:100%">'
+            f'<div style="font-size:15px;opacity:0.8">{label}</div>'
+            f'<div style="font-size:34px;font-weight:700;color:{color};line-height:1.2">{value}</div>'
+            f'<div style="font-size:13px;opacity:0.75">{sub}</div></div>')
+
+
+def _skill_color(v: float) -> str:
+    return GOOD if v > 0 else BAD if v < 0 else "#6b7280"
 
 
 def render(ctx) -> None:
@@ -70,56 +93,90 @@ def _render_scores() -> None:
         except (OSError, ValueError):
             summ = {}
     n_win = sorted({r.get("n_windows", "?") for r in rows})
-    st.caption(f"Source: `eval/scores.csv` written by our scorer (eval/score.py, organisers' metric code) · "
-               f"file time {mtime} · produced by backend `{summ.get('backend', 'not recorded')}` · "
-               f"windows pooled: {', '.join(n_win)} (validation years 2019–2021; climatology from 2005–2018). "
-               f"Regenerate with `{GEN_CMD}`.")
     leads = sorted({int(r["lead"]) for r in rows})
 
     def series(col, ch):
         by = {int(r["lead"]): _f(r.get(col)) for r in rows if r["channel"] == ch}
         return [by.get(lead, float("nan")) for lead in leads]
 
-    left, right = st.columns(2)
-    for col, title, where, key in (("ss_persist", "Skill vs persistence (1 − RMSE/RMSE persistence)", left, "mc_ssp"),
-                                   ("ss_clim", "Skill vs climatology (1 − RMSE/RMSE climatology)", right, "mc_ssc")):
+    vr_lead = 8 if 8 in leads else leads[-1]
+    vr = [(ch, _f(next((r["var_ratio"] for r in rows if r["channel"] == ch and int(r["lead"]) == vr_lead), "nan")))
+          for ch in CHANNELS]
+    in_band = sum(BAND[0] <= v <= BAND[1] for _, v in vr)
+
+    # ---- scorecard
+    st.markdown("#### Scorecard · skill vs the better baseline (persistence or climatology)")
+    cards = scorecard(rows, [lead for lead in (1, 4, 8) if lead in leads])
+    cols = st.columns(len(cards) + 1, gap="small")
+    for col, sc in zip(cols, cards):
+        v = sc["skill"]
+        col.markdown(_tile(f"Day {sc['lead']}", f"{v:+.2f}",
+                           "beats the baseline" if v > 0 else "worse than the baseline" if v < 0 else "ties the baseline",
+                           _skill_color(v)), unsafe_allow_html=True)
+    cols[-1].markdown(_tile(f"Day-{vr_lead} sharpness", f"{in_band}/{len(vr)}", "channels in the 40–250% variance band",
+                            GOOD if in_band == len(vr) else BAD), unsafe_allow_html=True)
+    st.caption("Mean over the 6 channels of 1 − RMSE / RMSE of the better reference. Above 0 beats it; "
+               "+0.12 earns full points.")
+
+    # ---- charts
+    left, right = st.columns(2, gap="medium")
+    for col, title, where, key in (("ss_persist", "Skill vs persistence", left, "mc_ssp"),
+                                   ("ss_clim", "Skill vs climatology", right, "mc_ssc")):
         fig = go.Figure()
-        for i, ch in enumerate(CHANNELS):
+        for ch in CHANNELS:
             fig.add_trace(go.Bar(x=[f"day {lead}" for lead in leads], y=series(col, ch), name=ch,
-                                 marker_color=COLORS[i]))
+                                 marker_color=CHANNEL_COLORS[ch],
+                                 hovertemplate=ch + ": %{y:+.3f}<extra></extra>"))
         fig.add_hline(y=0, line_color="#666666", line_width=1)
-        where.plotly_chart(_layout(fig, title, "skill score (> 0 is better than the reference)"), key=key)
+        vals = [v for ch in CHANNELS for v in series(col, ch) if v == v]
+        if vals and all(v == 0 for v in vals):
+            fig.add_annotation(x=0.5, y=0.78, xref="paper", yref="paper", showarrow=False, font=dict(size=15),
+                               text="0 at every lead: the forecast is persistence itself")
+        where.plotly_chart(_layout(fig, title, "skill (> 0 beats it)"), key=key, config=NO_BAR)
 
+    left, right = st.columns(2, gap="medium")
     fig = go.Figure()
-    for i, ch in enumerate(CHANNELS):
+    for ch in CHANNELS:
         fig.add_trace(go.Scatter(x=leads, y=series("ss", ch), name=ch, mode="lines+markers",
-                                 line=dict(color=COLORS[i], width=2), marker=dict(size=8)))
-    fig.add_hline(y=0.12, line_dash="dot", line_color="#666666", annotation_text="full points at +0.12")
-    fig.update_xaxes(tickvals=leads, title="lead day")
-    st.plotly_chart(_layout(fig, "Skill vs the better reference (what the judge scores)", "skill score"),
-                    key="mc_ss")
+                                 line=dict(color=CHANNEL_COLORS[ch], width=2.5), marker=dict(size=8)))
+    fig.add_hline(y=0.12, line_dash="dot", line_color=GOOD, annotation_text="full points +0.12",
+                  annotation_position="top left", annotation_font=dict(size=13))
+    fig.add_hline(y=0, line_color="#666666", line_width=1)
+    fig = _layout(fig, "Skill vs the better reference (judged)", "skill score")
+    fig.update_xaxes(tickvals=leads, ticktext=[f"day {lead}" for lead in leads])
+    left.plotly_chart(fig, key="mc_ss", config=NO_BAR)
 
-    left, right = st.columns(2)
+    ymax = max(100 * BAND[1] * 1.12, max((100 * v for _, v in vr if v == v), default=0) * 1.15)
+    fig = go.Figure(go.Bar(x=[c for c, _ in vr], y=[100 * v for _, v in vr],
+                           marker_color=[CHANNEL_COLORS[c] for c, _ in vr],
+                           marker_line=dict(color=[BAD if not (BAND[0] <= v <= BAND[1]) else "rgba(0,0,0,0)"
+                                                   for _, v in vr], width=3),
+                           text=[f"{100 * v:.0f}%" + ("" if BAND[0] <= v <= BAND[1] else " ✗") for _, v in vr],
+                           textposition="outside", textfont=dict(size=13),
+                           hovertemplate="%{x}: %{y:.0f}% of real variance<extra></extra>"))
+    fig.add_hrect(y0=100 * BAND[0], y1=100 * BAND[1], fillcolor=GOOD, opacity=0.12, line_width=0, layer="below")
+    fig.add_annotation(x=1.0, xref="paper", xanchor="right", y=100 * BAND[1], yanchor="bottom", showarrow=False,
+                       text="full-marks band 40–250%", font=dict(size=13, color=GOOD))
+    fig = _layout(fig, f"Day-{vr_lead} variance ratio (forecast ÷ truth)", "% of real variance")
+    fig.update_layout(showlegend=False)
+    fig.update_yaxes(range=[0, ymax])
+    right.plotly_chart(fig, key="mc_var", config=NO_BAR)
+
+    st.markdown("**Heavy rain (tp > 10 mm/day) · CSI skill**")
     tp = {int(r["lead"]): r for r in rows if r["channel"] == "tp"}
     csi_rows = [{"lead day": lead, "CSI model": _f(tp[lead]["csi_model"]), "CSI persistence": _f(tp[lead]["csi_persist"]),
                  "CSI climatology": _f(tp[lead]["csi_clim"]), "CSI skill": _f(tp[lead]["csi_skill"])}
                 for lead in leads if lead in tp]
-    left.markdown("**Heavy rain (tp > 10 mm/day) · CSI skill**")
-    left.dataframe(csi_rows, hide_index=True, width="stretch")
-    left.caption("CSI = hits / (hits + misses + false alarms). CSI skill > 0 beats the better of persistence "
-                 "and climatology; +0.10 earns full points.")
-
-    vr_lead = 8 if 8 in leads else leads[-1]
-    vr = [(ch, _f(next((r["var_ratio"] for r in rows if r["channel"] == ch and int(r["lead"]) == vr_lead), "nan")))
-          for ch in CHANNELS]
-    fig = go.Figure(go.Bar(x=[c for c, _ in vr], y=[100 * v for _, v in vr],
-                           marker_color=[COLORS[0] if BAND[0] <= v <= BAND[1] else "#dc3c3d" for _, v in vr],
-                           hovertemplate="%{x}: %{y:.0f}%<extra></extra>"))
-    fig.add_hrect(y0=100 * BAND[0], y1=100 * BAND[1], fillcolor="#00b894", opacity=0.12, line_width=0,
-                  annotation_text="full-marks band 40–250%", annotation_position="top left")
-    right.plotly_chart(_layout(fig, f"Day-{vr_lead} spatial variance ratio (forecast ÷ truth)", "% of real variance"),
-                       key="mc_var")
-    right.caption("Below 40% means a blurry forecast; above 250% means inflated noise. Red bars are outside the band.")
+    st.dataframe(csi_rows, hide_index=True, width="stretch",
+                 column_config={k: st.column_config.NumberColumn(format="%.3f")
+                                for k in ("CSI model", "CSI persistence", "CSI climatology", "CSI skill")})
+    st.caption("CSI = hits / (hits + misses + false alarms). CSI skill > 0 beats the better of persistence and "
+               "climatology; +0.10 earns full points. Variance ratio below 40% means a blurry forecast, above 250% "
+               "inflated noise.")
+    st.caption(f"Source: `eval/scores.csv` written by our scorer (eval/score.py, organisers' metric code) · "
+               f"file time {mtime} · backend `{summ.get('backend', 'not recorded')}` · "
+               f"windows pooled: {', '.join(n_win)} (validation 2019–2021; climatology 2005–2018). "
+               f"Regenerate with `{GEN_CMD}`.")
 
 
 def _render_limits(backend: str) -> None:

@@ -75,6 +75,7 @@ def test_extras_tabs_live(server):
 
     text = _all_text(at)
     assert "Shock Lab" in text and "Known limits" in text
+    assert "Shock stays local on day 1" in text and "Scorecard" in text
     assert len(at.dataframe) >= 1                       # causality table (and CSI table)
 
     at.button(key="zero_shock_button").click().run()
@@ -88,3 +89,23 @@ def test_extras_tabs_live(server):
     ens = at.session_state["ensemble"]
     assert ens["members"].shape == (8, 10, 6, 32, 36)
     assert ens["members"].std(axis=0).max() > 0          # dashboard noise produced a spread
+    assert any("8 live calls in" in str(s.value) for s in at.success)   # total time shown
+
+
+def test_verdict_and_scorecard_helpers():
+    for p in (ROOT, ROOT / "dashboard"):
+        if str(p) not in sys.path:
+            sys.path.insert(0, str(p))
+    import tab_modelcard
+    import tab_shocklab
+    chk = {"nonzero": True, "localized": True, "propagates": False, "no_teleport": True, "stable": True,
+           "near_frac_day1": 1.0, "far_frac_max": 0.0}
+    v = tab_shocklab.verdict(chk, is_persistence=True)
+    assert "100% of energy within 3 cells ✓" in v and "Spreads outward by day 4–8: ✗" in v
+    assert "persistence stub does not move" in v
+    assert "persistence" not in tab_shocklab.verdict({**chk, "propagates": True}, is_persistence=True)
+    rows = tab_shocklab.checks_rows(chk)
+    assert [r[""] for r in rows] == ["✓", "✓", "✗", "✓", "✓"]
+    sc = tab_modelcard.scorecard([{"lead": "1", "ss": "0.1"}, {"lead": "1", "ss": "-0.3"},
+                                  {"lead": "4", "ss": "0.2"}, {"lead": "8", "ss": ""}])
+    assert [(c["lead"], round(c["skill"], 6)) for c in sc] == [(1, -0.1), (4, 0.2)]
