@@ -105,7 +105,7 @@ div[data-testid="stDataFrame"] { font-stretch: 87.5%; }
 .mm-story { font-size: 1.02rem; color: var(--ink); margin: 0.15rem 0 0 0; }
 /* Maps tab control panel */
 .mm-dayhead { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 0.7rem; row-gap: 0.1rem;
-              color: var(--ink); margin: 0.2rem 0 0 0; }
+              color: var(--ink); margin: 0.2rem 0 0.9rem 0; }
 .mm-dayhead .mm-day { font-size: 2.3rem; font-weight: 720; font-stretch: 125%; line-height: 1; }
 .mm-date { font-size: 1.1rem; font-weight: 600; }
 .mm-tag { font-size: 0.85rem; padding: 0.05rem 0.5rem; border: 1px solid var(--hair); border-radius: 3px;

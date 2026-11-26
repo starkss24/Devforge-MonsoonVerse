@@ -259,8 +259,7 @@ def _shift_day(delta: int) -> None:
 
 
 def _on_play() -> None:
-    st.session_state["play_request"] = True
-    st.session_state["lead_day"] = _timeline_bounds()[1]     # the animation ends on the last day
+    st.session_state["play_request"] = True                  # the timeline jumps to the last day after the run
 
 
 def _on_map_click(key: str) -> None:
@@ -320,10 +319,10 @@ def render(ctx) -> None:
 
     left, right = st.columns([1.18, 0.82], gap="medium")
     map_ph = left.empty()
+    playing = bool(st.session_state.pop("play_request", False)) and run is not None
     with right:
         head_ph = st.empty()
-        st.select_slider("Timeline", days, key="lead_day", format_func=timeline_label,
-                         label_visibility="collapsed")
+        slider_ph = st.empty()     # the timeline; while Play runs, a progress bar in the same place
         _day_buttons(st, run is not None, steps)
         st.segmented_control("Show", VIEWS, key="map_view", required=True, label_visibility="collapsed",
                              format_func=lambda v: VIEW_TEXT[v])
@@ -331,7 +330,13 @@ def render(ctx) -> None:
                              label_visibility="collapsed", format_func=lambda m: CLICK_TEXT[m])
         info_ph = st.empty()
 
+    def timeline_widget() -> None:
+        slider_ph.select_slider("Timeline", days, key="lead_day", format_func=timeline_label,
+                                label_visibility="collapsed")
+
     k = int(st.session_state.get("lead_day", 1))
+    if not playing:
+        timeline_widget()
     if run is None:
         head_ph.markdown(_dayhead_html(k, c.last_day), unsafe_allow_html=True)
         live = st.session_state.get("live_mode", True)
@@ -442,10 +447,14 @@ def render(ctx) -> None:
         info_ph.markdown("<div class='mm-facts'>" + "".join(f"<p>{x}</p>" for x in lines) + "</div>",
                          unsafe_allow_html=True)
 
-    if st.session_state.pop("play_request", False):
-        for day in days:
+    if playing:
+        for i, day in enumerate(days):
+            slider_ph.progress((i + 1) / len(days), text=f"Playing: {timeline_label(day)} (to day {steps})")
             draw(day, interactive=False)
             time.sleep(PLAY_SECONDS)
+        k = days[-1]
+        st.session_state["lead_day"] = k          # set before the timeline widget exists in this run
+        timeline_widget()
     draw(k, interactive=True)
 
     # ---- below the fold: the shock's effect day by day, side by side, and the forecast at one place
