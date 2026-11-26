@@ -22,7 +22,7 @@ Last updated: 2026-11-26. Source of truth for what is on `main`; per-agent log i
 - ✅ Organisers' `schema_validator` passes (all 6 cases, ~0.05 s each)
 - ✅ `eval/score.py` and `eval/shock_test.py` use the kit's own scoring code; run on real data
 - ✅ Weights loader: drop a TorchScript `weights/model.pt` in and the server uses it (`docs/WEIGHTS.md`)
-- ✅ Repo hygiene: `.gitignore` (data never committed), Git LFS rules, pinned requirements, repo-scan and clean-clone scripts
+- ✅ Repo hygiene: `.gitignore` (data never committed), weights as plain git files (no LFS), pinned requirements, repo-scan and clean-clone scripts
 - ✅ 65 tests passing
 - ⏳ Load and score Aether's checkpoints; re-time latency with the real model; commit weights
 - ⏳ Review Junaid's baselines.csv and Akash's dashboard PR; hour-19 clean-clone test
@@ -60,6 +60,6 @@ Last updated: 2026-11-26. Source of truth for what is on `main`; per-agent log i
 Round 2 hard gate (beat persistence at day 4) currently **fails** — expected until the real model lands.
 
 ## Open decisions
-1. **Git LFS vs plain file for `model.pt`.** repo_scan reads files on disk; if the judge's clone skips LFS, the checkpoint is a pointer and 8 points are lost. A small U-Net (a few MB) fits in git directly. Recommendation: plain file.
+1. ~~Git LFS vs plain file for weights~~ **Decided: plain git files** (LFS rules removed from `.gitattributes`; `repo_scan_lite.py` fails on LFS pointers or files > 95 MB).
 2. **Protect `main`** in GitHub settings (require pull requests).
 3. **Collaborators:** add Aether, Junaid and Akash to the repo so they can push branches.

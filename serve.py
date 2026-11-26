@@ -2,7 +2,7 @@
 
 Run:  python serve.py --port 8000     (listens on 0.0.0.0)
 
-Allowed imports only: numpy, torch (optional), fastapi, uvicorn, stdlib, common, twin.
+Allowed imports only: numpy, torch (optional), fastapi, uvicorn, stdlib, common, twin (-> postproc).
 Never import monsoon_r1 (the organisers' kit is not in the judge sandbox).
 Writes nothing to disk.
 """
@@ -105,6 +105,8 @@ def create_app(twin: Optional[Twin] = None) -> FastAPI:
             "backend": t.backend,
             "load_error": getattr(t, "load_error", None),
             "nonfinite_fallbacks": getattr(t, "nonfinite_fallbacks", 0),
+            "post": getattr(t, "post_status", "absent"),   # post-processing: loaded | absent | skipped | error
+            "post_failures": getattr(t, "post_failures", 0),
             "torch": torch is not None,
             "fallbacks": app.state.fallbacks,
         }

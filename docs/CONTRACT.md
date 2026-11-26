@@ -13,9 +13,10 @@
 - `common.py`: channel order, grid (`LATS`, `LONS`), validity bounds, `BOXES`, `box_mask()`, `make_shock()`, `doy_sincos()`, `enforce_validity()`.
 - `twin.py`: `Twin().rollout(init_states, doy_sincos, steps=10, perturbation=None) -> [steps,6,32,36]`. Signature frozen.
   Backend "onnx" if `weights/model.onnx` loads (onnxruntime, preferred), else "torchscript" if `weights/model.pt` loads, otherwise "persistence" (see `docs/WEIGHTS.md`; override with env TWIN_BACKEND).
+  With a model backend, `weights/post.npz` (if present) post-processes the finished rollout before the clamps (`postproc.py`).
 
 ## HTTP API (serve.py, repo root, 0.0.0.0, `python serve.py --port 8000`)
-- `POST /health` (GET also works) -> `{"status": "ready", "model_name": str, "backend": "onnx"|"torchscript"|"persistence", "load_error", "nonfinite_fallbacks", "torch", "fallbacks"}`.
+- `POST /health` (GET also works) -> `{"status": "ready", "model_name": str, "backend": "onnx"|"torchscript"|"persistence", "load_error", "nonfinite_fallbacks", "post": "loaded"|"absent"|"skipped: ..."|"error: ...", "post_failures", "torch", "fallbacks"}`.
   The model loads and warms up before the server listens, so the cold start falls inside the judge's /health polling (120 s).
 - `POST /simulate` body: `{"init_states": [3][6][32][36], "doy_sincos": [s, c], "steps": 10, "perturbation": null | [6][32][36]}`
   -> `{"rollout": [steps][6][32][36], "inference_ms": float}`. Arrays are nested lists (canonical); `{"b64","shape"}` input is tolerated.
@@ -35,5 +36,5 @@ Repo 15 (`monsoon_r1.repo_scan.scan`) + brief 15.
   uvicorn, gunicorn (+ our own modules). Never `monsoon_r1` (not in the judge sandbox).
 - repo_scan treats every .py that mentions `/simulate` (and what it imports) as inference code: no weather-API names and fewer than
   3 date literals in those files.
-- Never commit data (`data/`, `*.nc`). Weights go in `weights/` (needs a checkpoint > 1 KB in the repo or anti-cheat scores 0).
+- Never commit data (`data/`, `*.nc`). Weights go in `weights/` as plain git files, not Git LFS (needs a checkpoint > 1 KB in the repo or anti-cheat scores 0).
 - Banned: weather APIs / internet, hardcoded dates or lookup tables, loosening a check to pass it, silent try/except returning zeros.

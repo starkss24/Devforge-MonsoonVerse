@@ -10,6 +10,12 @@ git -C "$SRC" rev-parse -q --verify HEAD >/dev/null || fail "no commits yet: the
 [ -n "$(git -C "$SRC" status --porcelain)" ] && echo "WARN: uncommitted changes are NOT part of this check"
 git clone -q "$SRC" "$TMP/repo" || fail clone
 cd "$TMP/repo"
+# Weights are plain git files (no Git LFS): a fresh clone must contain the real bytes, never LFS pointers.
+for w in weights/*; do
+  [ -f "$w" ] || continue
+  head -c 40 "$w" | grep -q "^version https://git-lfs" && fail "$w is a Git LFS pointer in the clean clone"
+done
+echo "weights: $(ls weights | grep -v '^\.gitkeep$' | tr '\n' ' ')(no LFS pointers)"
 python -m venv .venv || fail venv
 if [ -f .venv/Scripts/python.exe ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
 "$PY" -m pip install -q -r requirements.txt || fail install

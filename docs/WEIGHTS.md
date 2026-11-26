@@ -8,7 +8,8 @@ The server doesn't need any of your training code. Export the same wrapper twice
 | `weights/model.pt` | `"torchscript"` (fallback) | `torch.jit.load` |
 | neither / both fail | `"persistence"` | numpy |
 
-plus an optional `weights/model_meta.json`. `twin.py` picks them up at start-up. Nothing else changes.
+plus an optional `weights/model_meta.json` and the post-processing arrays `weights/post.npz` (format below).
+`twin.py` picks them up at start-up. Nothing else changes.
 
 **Why both, and why ONNX first:** on Python 3.14+ torch warns `torch.jit.load is not supported in Python 3.14+
 and may break`. The judge's Python version is unknown, so TorchScript alone is a risk; onnxruntime 1.32 ships
@@ -111,14 +112,48 @@ float32 round-off (day 1 within 1e-6 relative, 10 days within 1e-5 relative).
 `torch.jit.script(w).save("weights/model.pt")`. If scripting fails,
 `torch.jit.trace(w, ex)` works too (no data-dependent control flow).
 
+## Post-processing: `weights/post.npz` (optional)
+
+The final model's climatology blend + rain quantile map (`twin_model/post.py::Post`) acts on the **finished
+rollout** and depends on the lead day, so it can't live in the one-day `step`. Export its arrays to
+`weights/post.npz`; `twin.py` applies them with `postproc.py` (numpy only, op-for-op `Post.apply`; bit-identical
+in `tests/test_postproc.py`) after the loop and before the validity clamps. Never fed back into the loop.
+
+| key | dtype | shape | meaning |
+|---|---|---|---|
+| `version` | int64 scalar | `()` | format version, must be `1` (optional; checked if present) |
+| `blend` | float32 | `[L,6]` | climatology weight per lead (row k = rollout[k]) and channel, clipped to [0,1] |
+| `clim` | float32 | `[366,6,32,36]` | one-year climatology, physical units, kit 366-slot calendar (Feb 29 = slot 59) |
+| `qmap_fq` | float32 | `[L,Q]` | rain qmap forecast knots per lead, strictly increasing, first knot 0 |
+| `qmap_oq` | float32 | `[L,Q]` | rain qmap observed knots per lead, non-decreasing, first knot 0 |
+| `qmap_strength` | float32 | `[L]` | optional, values in [0,1]; absent = 1 (the frozen model doesn't use it) |
+| `meta` | str scalar | `()` | optional JSON object, e.g. `np.array(json.dumps({...}))` |
+
+`blend`+`clim` and `qmap_fq`+`qmap_oq` are pairs (either pair may be absent, not both). L = 10 fitted leads;
+leads beyond L reuse the last row. No other keys; no object arrays (loaded with `allow_pickle=False`).
+Clim slot for rollout[k]: doy `d0` of the last input day from `atan2(doy_sincos)` (1..365, as `Post`), then
+kit slot of `d0 + k + 1`. Export from the checkpoint's `"post"` block:
+
+```python
+from twin_model.post import Post
+from postproc import save_npz                       # validates, writes float32 + version + meta
+p = Post.from_dict(torch.load("runs/<run>/best_post.pt", weights_only=True)["post"])
+save_npz("weights/post.npz", p.blend, p.clim, p.fq, p.oq, p.strength, meta={"model_name": "..."})
+```
+
+Behaviour: no file -> output identical to before (bit-for-bit). Malformed file (bad keys/shapes, NaN, LFS
+pointer) -> logged, skipped, `/health` `"post": "error: ..."`. Loaded -> `"post": "loaded"`. Never applied on
+the persistence backend (`"post": "skipped: persistence backend"`): the arrays were fitted on the model's output.
+~10 MB. The kit's `repo_scan` only flags arrays with a leading dim > 400 ending in (32, 36); `clim` (366) passes.
+
 ## File size and git
 
-A ~2M-param net is ~8.5 MB as `.onnx` and about the same as `.pt`. **Team recommendation (pending decision):
-commit `model.onnx` as a plain git file, not LFS**, so the judge's clone has the real bytes even without
-`git lfs pull`. Today `.gitattributes` still routes `*.onnx` and `*.pt` through LFS: drop the `*.onnx` line
-before committing it (team decision; `scripts/repo_scan_lite.py` currently expects `*.pt` in LFS). If a file
-does arrive as an LFS pointer, Twin detects it (both formats), skips it and says so in `/health.load_error`.
-Check `git lfs ls-files` after you commit.
+Weights are committed as **plain git files, not Git LFS**, so the judge's clone has the real bytes without
+`git lfs pull`. A ~2M-param net is ~8.5 MB as `.onnx` and about the same as `.pt`; `post.npz` is ~10 MB.
+`.gitattributes` only marks `*.onnx`, `*.pt`, `*.npz` as binary. `scripts/repo_scan_lite.py` fails if a weights
+file is outside `weights/`, is an LFS pointer, or is > 95 MB; `scripts/clean_clone_check.sh` checks the clone
+has no pointers. If a file does arrive as an LFS pointer anyway, Twin detects it (all three files), skips it and
+says so in `/health` (`load_error` / `post`).
 
 ## Self-test (before handing over)
 

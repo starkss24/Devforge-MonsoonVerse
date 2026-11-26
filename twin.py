@@ -11,6 +11,10 @@ Backends (one-day step contract, docs/WEIGHTS.md):
   Every fallback is logged loudly and counted; nothing fails silently.
 Override the preference with env TWIN_BACKEND=onnx|torchscript|persistence (testing).
 
+Post-processing (postproc.py, docs/WEIGHTS.md): if weights/post.npz exists AND a model backend loaded, the finished
+rollout gets the climatology blend + rain quantile map before the validity clamps (never fed back into the loop).
+Missing post.npz -> output exactly as without it; malformed -> logged loudly, skipped, shown in /health "post".
+
 Signature of rollout() is frozen (docs/CONTRACT.md).
 """
 from __future__ import annotations
@@ -26,6 +30,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from common import CH, INIT_SHAPE, N_THREADS, STATE_SHAPE, T2M_MAX_K, T2M_MIN_K, TP_MIN, enforce_validity
+from postproc import POST_FILE, PostProc
 
 log = logging.getLogger("twin")
 WEIGHTS_DIR = Path(__file__).resolve().parent / "weights"
@@ -46,14 +51,20 @@ def _check_not_lfs_pointer(p: Path) -> None:
 
 
 class Twin:
-    def __init__(self, weights_path: Path | str | None = WEIGHTS_DIR, meta_path: Path | str | None = None):
+    def __init__(self, weights_path: Path | str | None = WEIGHTS_DIR, meta_path: Path | str | None = None,
+                 post_path: Path | str | None = None):
         """weights_path: a directory (looks for model.onnx, then model.pt) or one weights file
-        (.onnx -> onnx, anything else -> TorchScript). None -> persistence."""
+        (.onnx -> onnx, anything else -> TorchScript). None -> persistence.
+        post_path: post-processing arrays (default: post.npz next to the weights)."""
         self.weights_path = Path(weights_path) if weights_path else None
         wdir = None
         if self.weights_path is not None:
             wdir = self.weights_path if self.weights_path.is_dir() else self.weights_path.parent
         self.meta_path = Path(meta_path) if meta_path else (wdir / "model_meta.json" if wdir else None)
+        self.post_path = Path(post_path) if post_path else (wdir / POST_FILE if wdir else None)
+        self.post: Optional[PostProc] = None
+        self.post_status = "absent"       # "loaded" | "absent" | "skipped: ..." | "error: ..." (shown in /health)
+        self.post_failures = 0
         self.model = None                 # TorchScript module or onnxruntime InferenceSession
         self.backend = "persistence"
         self.model_name = DEFAULT_MODEL_NAME
@@ -66,6 +77,7 @@ class Twin:
         self._lock = threading.Lock()
         if self.weights_path is not None:
             self._load()
+        self._load_post()
 
     # ---- loading -----------------------------------------------------------
     def _candidates(self) -> list[tuple[str, Path]]:
@@ -121,6 +133,42 @@ class Twin:
                 log.error("no weights could be loaded; STAYING ON PERSISTENCE")
             else:
                 log.info("no weights in %s; backend=persistence", self.weights_path)
+
+    def _load_post(self) -> None:
+        """Load weights/post.npz. Only for a real model backend: the arrays are fitted on THAT model's output
+        (blend weights and rain quantiles correct its biases), so applying them to persistence would blend a
+        different forecast with weights that were never fitted for it."""
+        p = self.post_path
+        if p is None or not p.is_file():
+            self.post_status = "absent"
+            log.info("no post-processing file at %s; raw model output", p)
+            return
+        if self.model is None:
+            self.post_status = "skipped: persistence backend"
+            log.warning("%s present but no model loaded; post-processing NOT applied to persistence", p.name)
+            return
+        try:
+            post = PostProc.load(p)
+            # Smoke test on a real model rollout, so a bad file is caught at start-up, not in a scored call.
+            warm = np.broadcast_to(_WARMUP_STATE[None, :, None, None], INIT_SHAPE).astype(np.float64)
+            d = np.array([0.0, 1.0])
+            y = post.apply(self._model_rollout(warm, d, 2), d)
+            if not np.all(np.isfinite(y)):
+                raise ValueError("post-processing of the warm-up rollout produced NaN/Inf")
+            self.post, self.post_status = post, "loaded"
+            log.info("post-processing loaded from %s (%s)", p, post.describe())
+        except Exception as e:  # noqa: BLE001 - malformed file: raw model output, loudly, reported in /health
+            self.post, self.post_status = None, f"error: {type(e).__name__}: {e}"
+            log.error("FAILED to load post-processing %s (%s); serving RAW model output", p, self.post_status)
+
+    def _apply_post(self, out: np.ndarray, d: np.ndarray) -> np.ndarray:
+        """Post-process a finished, finite model rollout. Non-finite result -> raw rollout (logged + counted)."""
+        y = self.post.apply(out, d)
+        if np.all(np.isfinite(y)):
+            return y.astype(np.float64)
+        self.post_failures += 1
+        log.error("post-processing produced NaN/Inf; serving the raw model rollout (count=%d)", self.post_failures)
+        return out
 
     def _load_onnx(self, p: Path) -> None:
         import onnxruntime as ort  # optional dependency: only needed when model.onnx is present
@@ -219,6 +267,8 @@ class Twin:
         if self.model is not None:
             out = self._model_rollout(x, d, steps)
             if np.all(np.isfinite(out)):
+                if self.post is not None:  # after the loop, before the clamps; never on persistence
+                    out = self._apply_post(out, d)
                 return enforce_validity(out)
             # never return NaN/Inf: count, log loudly, fall through to persistence
             self.nonfinite_fallbacks += 1

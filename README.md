@@ -48,12 +48,12 @@ the impact maths is in [docs/IMPACT.md](docs/IMPACT.md).
 | Path | What | Owner |
 |---|---|---|
 | `serve.py` | FastAPI server, contract checks, persistence fallback | Vishwak |
-| `twin.py` | `Twin.rollout()`; loads `weights/model.pt` (TorchScript), else persistence | Vishwak |
+| `twin.py` | `Twin.rollout()`; loads `weights/model.onnx` (else TorchScript `model.pt`, else persistence), applies `weights/post.npz` via `postproc.py` | Vishwak |
 | `common.py` | Shared constants: channels, grid, shock boxes, validity clamps | Vishwak |
 | `eval/score.py` | Judge-identical forecast scoring (uses the kit's `monsoon_r1.scoring`) | Vishwak |
 | `eval/shock_test.py` | warm_ocean / monsoon_stall / null shock causality checks | Vishwak |
 | `eval/BASELINE.md` | Persistence baseline scores the model must beat | Vishwak |
-| `weights/` | Model checkpoint (only Vishwak commits here) | Vishwak |
+| `weights/` | Model weights, plain git files, no Git LFS (only Vishwak commits here) | Vishwak |
 | `docs/WEIGHTS.md` | How to export the model so the server loads it | Aether → Vishwak |
 | `tools/validate.py`, `scripts/` | Pre-checks, repo scan, clean-clone test | Vishwak |
 | model + training code | (to come) | Aether |
