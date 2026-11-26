@@ -10,7 +10,7 @@ Last updated: 2026-11-26. Source of truth for what is on `main`; per-agent log i
 | 3 | Baselines: loader, year split, baselines CSV; scorer runs on any model | 🟡 Scorer done and run on real data; Junaid's loader/baselines.csv not in repo yet |
 | 6 | First U-Net beats persistence at day 4, live behind the server | ⏳ Waiting on Aether's weights (server loader ready) |
 | 10 | Architecture freeze; shock tests pass on real boxes | ⏳ Shock tests ready; need the real model |
-| 14 | Impact module + ensemble toggle in dashboard | ⏳ Junaid / Akash, not in repo yet |
+| 14 | Impact module + ensemble toggle in dashboard | 🟡 Dashboard + ensemble done; impact module (Junaid) not in repo yet |
 | 17 | Code freeze, final weights committed | ⏳ |
 | 19 | Clean-clone test + rehearsal | ⏳ Script ready (`scripts/clean_clone_check.sh`) |
 
@@ -33,8 +33,14 @@ Last updated: 2026-11-26. Source of truth for what is on `main`; per-agent log i
 ### Junaid — data, baselines, impact, README/brief
 - ⏳ Nothing in the repo yet. Needs: data loader, `baselines.csv`, `impact/crop_stress.py` with tests, brief page 2, demo script
 
-### Akash — dashboard
-- ⏳ Reported done, but nothing in the repo yet. Push to branch `feat/akash-dashboard` under `dashboard/` and open a PR (+1 repo-scan point for a frontend)
+### Akash — dashboard (built by Vishwak's agents, on `main`)
+- ✅ `dashboard/`: Streamlit app calling the live server on every Run; sidebar with real start windows, 6 channels, day slider, wind arrows
+- ✅ Shock painter: warm_ocean / monsoon_stall presets + custom box; baseline / shocked / difference maps; day 1–10 animation
+- ✅ Shock Lab: response energy inside/near/outside the box by day, radial spread, kit causality checks, one-click zero-shock check
+- ✅ Ensemble tab (8 runs, small input noise, mean + spread); model card from `eval/scores.csv` with known limits
+- ✅ Impact tab reserved (empty) for Junaid's module; English labels only
+- ✅ Server-down message; route only in `dashboard/client.py` (repo scan: frontend +1, server still separate from UI)
+- ⏳ Visual check at 1280×720 on a projector
 
 ## Current score estimate (persistence stub, judge's own scoring)
 
@@ -43,7 +49,7 @@ Last updated: 2026-11-26. Source of truth for what is on `main`; per-agent log i
 | Forecast skill (RMSE 30 + rain CSI 15) | 0 / 45 | A model ~12 % better than climatology at days 4 and 8 |
 | Anti-blur | 8.3 / 10 | Real model keeping day-8 rain variance within 40–250 % |
 | Shock causality | 11.25 / 15 | Model whose shock response spreads outward by days 4–8 |
-| Repo scan | 2.5 / 15 | Checkpoint in repo (+8 anti-cheat), training code (+3), frontend (+1) |
+| Repo scan | 3.5 / 15 | Checkpoint in repo (+8 anti-cheat), training code (+3) |
 | Brief | – / 15 | Written by the team |
 
 Round 2 hard gate (beat persistence at day 4) currently **fails** — expected until the real model lands.

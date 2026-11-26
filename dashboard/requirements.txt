@@ -1,0 +1,6 @@
+# Dashboard only. Never imported by serve.py.
+streamlit==1.67.0
+plotly==7.2.0
+numpy
+xarray
+netCDF4

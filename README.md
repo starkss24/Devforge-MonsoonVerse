@@ -17,6 +17,7 @@ python serve.py --port 8000                               # start the server
 python tools/validate.py --url http://127.0.0.1:8000      # our pre-check
 python -m monsoon_r1.schema_validator http://127.0.0.1:8000   # organisers' validator
 python -m pytest -q                                       # all tests
+pip install -r dashboard/requirements.txt && streamlit run dashboard/app.py   # dashboard (needs data/ + running server)
 ```
 
 Use `127.0.0.1`, not `localhost`, on Windows (localhost adds ~2 s per request).
@@ -48,7 +49,7 @@ Check them against `SHA256SUMS.txt` from the same release.
 | `tools/validate.py`, `scripts/` | Pre-checks, repo scan, clean-clone test | Vishwak |
 | model + training code | (to come) | Aether |
 | data scripts, baselines, impact module | (to come) | Junaid |
-| `dashboard/` | (to come) Streamlit app calling the live `/simulate` | Akash |
+| `dashboard/` | Streamlit app: live maps, shock painter, Shock Lab, ensemble, model card (`streamlit run dashboard/app.py`) | Akash (built by Vishwak) |
 
 ## Working rules
 
