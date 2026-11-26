@@ -25,44 +25,11 @@ torch tensors so the file loads with ``weights_only=True``):
 """
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import torch
 
 from .norm import N_CH, RAIN
-
-N_SLOTS = 366
-_MAR1_DOY = 60  # 1-based day of year of 1 March in a non-leap year
-
-
-def doy_from_sincos(doy_sincos) -> int:
-    """Inverse of sin/cos(2*pi*doy/365): 1-based day of year in 1..365."""
-    s, c = (float(v) for v in np.asarray(doy_sincos, dtype=np.float64).reshape(2))
-    a = math.atan2(s, c) % (2 * math.pi)
-    d = int(round(a * 365.0 / (2 * math.pi))) % 365
-    return 365 if d == 0 else d
-
-
-def clim_slot(doy: int) -> int:
-    """Kit climatology slot (0..365, leap-year calendar, Feb 29 = slot 59) of a non-leap 1-based doy."""
-    doy = (int(doy) - 1) % 365 + 1
-    return doy - 1 if doy < _MAR1_DOY else doy
-
-
-def target_slots(doy_sincos, steps: int) -> np.ndarray:
-    """Climatology slot of each forecast day k = 1..steps after the last input day."""
-    d0 = doy_from_sincos(doy_sincos)
-    return np.array([clim_slot(d0 + k) for k in range(1, steps + 1)], dtype=np.int64)
-
-
-def qmap(x: np.ndarray, fq: np.ndarray, oq: np.ndarray) -> np.ndarray:
-    """Monotone piecewise-linear map through (fq, oq); slope-1 continuation past the last knot."""
-    y = np.interp(x, fq, oq)
-    hi = x > fq[-1]
-    if hi.any():
-        y = np.where(hi, oq[-1] + (x - fq[-1]), y)
-    return y.astype(np.float32, copy=False)
+from .post_numpy import N_SLOTS, clim_slot, doy_from_sincos, qmap, target_slots  # noqa: F401 (re-exported)
 
 
 def _np(v) -> np.ndarray:

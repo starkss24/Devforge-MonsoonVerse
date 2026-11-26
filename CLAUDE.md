@@ -46,7 +46,9 @@ Model lane (Aether): research/training code, not imported by the server. Module 
 - `training/` — data windows, losses, training CLI, `fit_post.py` (fits post-processing), `kit_eval.py` (scores a checkpoint with the kit's own scoring → projected points /70, appends to `kit_scores.csv`).
 - Other lanes: `eval/` (scorer, shock tests), `data_tools/`, `impact/`, `dashboard/`, `scripts/`, `tools/validate.py`.
 
-Integration gap (open): the post-processing (climatology blend per lead + rain quantile map per lead) is applied after the whole rollout and depends on the lead day, so it cannot live inside the one-day exported `step`. Root `twin.py` needs to apply it after its loop; without it the model scores ~45 instead of ~55 /70 on real 2023 windows. See `docs/HANDOFF_VISHWAK.md`.
+Export: `python -m training.export <ckpt> --out export --name <model_name>` writes `model.onnx`, TorchScript `model.pt`, `model_meta.json`, `post.npz` and verifies them against the training rollout (the net was trained on last-input-day doy; the export shifts the WEIGHTS.md predicted-day doy back one day). Exports are handed to the weights owner, not committed from this lane.
+
+Integration gap (open, Vishwak's `twin.py`): the post-processing (climatology blend per lead + rain quantile map per lead) applies to the finished rollout and depends on the lead day, so it cannot live inside the one-day `step`. `twin_model/post_numpy.py` (numpy-only) + `weights/post.npz` provide it; root `twin.py` must call `post_numpy.apply(out, doy_sincos_of_last_input_day, post)` after its loop. Judge simulation: 44/70 without, 61/70 with. See `docs/HANDOFF_VISHWAK.md`.
 
 Key ML invariants (PyTorch traps):
 - Rain lives in log1p space inside the model; denormalize in order: un-standardize, then `expm1`, then clamp ≥ 0.

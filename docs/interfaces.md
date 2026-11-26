@@ -32,6 +32,8 @@ Constants (`twin_model/norm.py`): `CHANNELS = ["t2m","tp","u10","v10","msl","tcw
     - `"qmap_fq"`, `"qmap_oq"` `[L,Q]` — rain quantile map per lead (forecast → observed tp knots; `fq` strictly increasing, `oq` non-decreasing, both start at 0 so 0 → 0; slope-1 continuation past the last knot) — given together.
     - `"qmap_strength"` `[L]` (optional, values in [0,1], absent = 1): `tp ← tp + s[k]·(qmap(tp) − tp)`. Tested 2026-11-27 (constant 0.25/0.5/0.75 and linear 1→0.5, 1→0.25): all scored below full strength on real 2023 windows, so the frozen model does not use it.
     - `"meta"` dict (plain types). Order inside `Twin.rollout`: model physical output → non-finite cells to persistence → blend → rain qmap → validity clamps. Exact deterministic functions of the model output (zero perturbation stays bit-identical). A malformed `"post"` logs a warning and Twin runs without it.
+  - `twin_model/post_numpy.py` (numpy + stdlib only, for the serving path): `load(path) -> dict`, `validate(dict) -> dict`, `apply(y [steps,6,H,W], doy_sincos_of_last_input_day, post) -> float32`. Bit-identical to `Post.apply`. File format `weights/post.npz`: `blend [L,6]`, `clim [366,6,H,W]`, `qmap_fq/qmap_oq [L,Q]`, optional `qmap_strength [L]`.
+  - `training/export.py`: checkpoint → `model.onnx` / TorchScript `model.pt` (one-day `step(states, doy_sincos_of_predicted_day) -> next_state` per `docs/WEIGHTS.md`), `model_meta.json`, `post.npz`, with equivalence checks.
   - `twin_model/post.py`: `class Post(blend, clim, qmap_fq, qmap_oq, meta)` with `from_dict/to_dict/apply(y [steps,6,H,W], doy_sincos)`; helpers `doy_from_sincos`, `clim_slot`, `target_slots`, `qmap`.
 
 ## training/
