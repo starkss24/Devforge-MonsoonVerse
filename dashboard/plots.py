@@ -415,3 +415,119 @@ def diff_strip(diffs, lats, lons, units: str, box=None, selected: int = 1, heigh
     fig.update_layout(height=height, margin=dict(l=4, r=48, t=24, b=6), showlegend=False,
                       plot_bgcolor="#ffffff", dragmode=False, hovermode="closest")
     return fig
+
+
+# ---------------------------------------------------------------- interaction helpers (Maps tab)
+def click_grid_trace(field2d, lats, lons, units: str, action: str) -> go.Scatter:
+    """Invisible point on every cell (customdata = [lat, lon, value]) so a click on a heatmap can be read back as a
+    point selection. The hover shows the place, the value and what a click does."""
+    lats, lons = np.asarray(lats, float), np.asarray(lons, float)
+    gx, gy = np.meshgrid(lons, lats)
+    z = np.asarray(field2d, dtype=float)
+    cd = np.stack([gy.ravel(), gx.ravel(), z.ravel()], axis=1)
+    return go.Scatter(x=gx.ravel(), y=gy.ravel(), mode="markers", customdata=cd, name="click_grid",
+                      marker=dict(size=9, opacity=0, color=INK), selected=dict(marker=dict(opacity=0)),
+                      unselected=dict(marker=dict(opacity=0)), showlegend=False,
+                      hovertemplate="%{customdata[0]:.1f}°N, %{customdata[1]:.1f}°E<br>%{customdata[2]:.2f} " + units
+                                    + "<br><i>click: " + action + "</i><extra></extra>")
+
+
+def add_click_grid(fig: go.Figure, field2d, lats, lons, units: str, action: str) -> go.Figure:
+    """Add the click grid and leave hover to it (the heatmap's own hover would show the value twice)."""
+    for tr in fig.data:
+        if tr.type == "heatmap":
+            tr.hoverinfo = "skip"
+            tr.hovertemplate = None
+    fig.add_trace(click_grid_trace(field2d, lats, lons, units, action))
+    fig.update_layout(dragmode=False, hovermode="closest")
+    return fig
+
+
+def probe_marker_trace(lat: float, lon: float, label: str = "") -> go.Scatter:
+    """Open ink ring with a white halo marking the place whose 10-day forecast is charted."""
+    return go.Scatter(x=[lon, lon], y=[lat, lat], mode="markers", name="probe", hoverinfo="skip", showlegend=False,
+                      marker=dict(size=[17, 13], symbol="circle-open", color=["#ffffff", INK],
+                                  line=dict(width=[4, 2.2], color=["#ffffff", INK])))
+
+
+def point_series(base, shocked, units: str, title: str, *, start=None, truth=None, selected: Optional[int] = None,
+                 height: int = 300) -> go.Figure:
+    """Baseline vs shocked at one place over the lead days, the gap between them shaded.
+
+    base/shocked: [steps] in display units for days 1..steps; start: value on the last input day (drawn as day 0);
+    truth: observed values for days 1..len(truth) (dotted, when the archive has them); selected: lead day to mark.
+    """
+    b = np.asarray(base, dtype=float)
+    s = np.asarray(shocked, dtype=float)
+    days = np.arange(1, b.size + 1)
+    if start is not None:
+        days = np.concatenate([[0], days])
+        b = np.concatenate([[float(start)], b])
+        s = np.concatenate([[float(start)], s])
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=days, y=b, name="Baseline", mode="lines+markers",
+                             line=dict(color=CATEGORICAL[0], width=3), marker=dict(size=7),
+                             hovertemplate="day %{x}: %{y:.2f} " + units + "<extra>Baseline</extra>"))
+    fig.add_trace(go.Scatter(x=days, y=s, name="Shocked", mode="lines+markers", fill="tonexty",
+                             fillcolor="rgba(213,94,0,0.14)", line=dict(color=CATEGORICAL[1], width=3),
+                             marker=dict(size=7),
+                             hovertemplate="day %{x}: %{y:.2f} " + units + "<extra>Shocked</extra>"))
+    if truth is not None and len(truth):
+        t = np.asarray(truth, dtype=float)
+        fig.add_trace(go.Scatter(x=np.arange(1, t.size + 1), y=t, name="What really happened", mode="lines+markers",
+                                 line=dict(color=MUTED, width=1.6, dash="dot"), marker=dict(size=6, symbol="x"),
+                                 hovertemplate="day %{x}: %{y:.2f} " + units + "<extra>Observed</extra>"))
+    if selected is not None:
+        fig.add_vline(x=int(selected), line=dict(color=TURMERIC, width=2.5), layer="below")
+    fig.update_layout(title=dict(text=title, x=0.0, xanchor="left", font=dict(size=16)), height=height,
+                      margin=dict(l=10, r=12, t=40, b=10), hovermode="x unified", plot_bgcolor="#ffffff",
+                      legend=dict(orientation="h", y=1.0, yanchor="bottom", x=1.0, xanchor="right",
+                                  font=dict(size=14)))
+    fig.update_xaxes(title_text="lead day (0 = last real day)", dtick=1, showgrid=False, showline=True,
+                     linecolor=HAIRLINE)
+    fig.update_yaxes(title_text=units, gridcolor="rgba(27,42,65,0.10)")
+    return fig
+
+
+CITY_LABELS = {  # name -> (lat °N, lon °E); drawn on the big map for orientation (all inside the grid)
+    "Delhi": (28.6, 77.2), "Mumbai": (19.1, 72.9), "Kolkata": (22.6, 88.4), "Chennai": (13.1, 80.3),
+    "Bengaluru": (13.0, 77.6), "Hyderabad": (17.4, 78.5), "Ahmedabad": (23.0, 72.6), "Jaipur": (26.9, 75.8),
+    "Lucknow": (26.8, 80.9), "Nagpur": (21.1, 79.1), "Bhubaneswar": (20.3, 85.8), "Guwahati": (26.1, 91.7),
+    "Thiruvananthapuram": (8.5, 76.9),
+}
+CITY_TEXTPOS = {"Chennai": "middle right", "Bengaluru": "middle left", "Jaipur": "middle left",
+                "Lucknow": "middle right", "Delhi": "top center", "Thiruvananthapuram": "middle right",
+                "Hyderabad": "middle right", "Ahmedabad": "middle left", "Mumbai": "middle left",
+                "Bhubaneswar": "middle right", "Kolkata": "top center", "Nagpur": "top center", "Guwahati": "top center"}
+MAP_CONFIG = {"displayModeBar": False, "scrollZoom": True, "doubleClick": "reset"}
+
+
+def city_trace(cities=None) -> go.Scatter:
+    c = CITY_LABELS if cities is None else cities
+    return go.Scatter(x=[v[1] for v in c.values()], y=[v[0] for v in c.values()], mode="markers+text",
+                      text=list(c), textposition=[CITY_TEXTPOS.get(n, "top center") for n in c],
+                      textfont=dict(size=13, color=INK),
+                      marker=dict(size=6, color=INK, line=dict(width=1.5, color="#ffffff")),
+                      hoverinfo="skip", name="cities", showlegend=False)
+
+
+def twin_map(field2d, lats, lons, title: str, units: str, cmap: str, zmin=None, zmax=None, zmid=None, *, box=None,
+             wind=None, coast=None, cities: bool = True, height: int = 500, wind_stride: int = 3,
+             wind_ref: Optional[float] = None, note: Optional[str] = None) -> go.Figure:
+    """The Maps tab's main map: one large field you can pan (drag), zoom (scroll, double-click resets) and click.
+
+    Same layers as field_map (coast, wind arrows, turmeric shock box, note) plus city labels; geographic ticks,
+    no axis titles, thin colourbar on the right. Offline: no tiles, so it works on a projector without internet."""
+    fig = field_map(field2d, lats, lons, title, units, cmap=cmap, zmid=zmid, zmin=zmin, zmax=zmax, box=box, wind=wind,
+                    height=height, wind_stride=wind_stride, coast=coast, colorbar="right", wind_ref=wind_ref,
+                    note=note)
+    if cities:
+        fig.add_trace(city_trace())
+    fig.data[0].colorbar.update(thickness=12, len=0.82, x=1.0, xpad=6, title=dict(text=units, side="right"))
+    fig.update_layout(margin=dict(l=46, r=8, t=36, b=26), dragmode="pan", hovermode="closest",
+                      title=dict(text=title, x=0.0, xanchor="left", y=0.985, yanchor="top", font=dict(size=17)))
+    fig.update_xaxes(title_text=None, tickvals=[70, 75, 80, 85, 90, 95, 100],
+                     ticktext=["70°E", "75°E", "80°E", "85°E", "90°E", "95°E", "100°E"], tickfont=dict(size=13))
+    fig.update_yaxes(title_text=None, scaleratio=LAT_SCALE, tickvals=[10, 15, 20, 25, 30, 35],
+                     ticktext=["10°N", "15°N", "20°N", "25°N", "30°N", "35°N"], tickfont=dict(size=13))
+    return fig

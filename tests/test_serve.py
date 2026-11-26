@@ -1,6 +1,7 @@
 """Tests for serve.py via fastapi.testclient (requires httpx)."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -43,8 +44,15 @@ def test_health(client, method):
     r = getattr(client, method)("/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ready"
-    assert r.json()["backend"] in ("persistence", "model")
-    assert isinstance(r.json()["model_name"], str) and r.json()["model_name"]
+    h = r.json()
+    assert h["backend"] in ("onnx", "torchscript", "persistence")     # twin.BACKEND_FILES + fallback
+    assert isinstance(h["model_name"], str) and h["model_name"]
+    # With the committed weights the server must really run the model (not silently fall back) and post-process.
+    wdir = Path(__file__).resolve().parents[1] / "weights"
+    if (wdir / "model.onnx").is_file() and "TWIN_BACKEND" not in os.environ:
+        assert h["backend"] == "onnx" and not h["load_error"], h
+        if (wdir / "post.npz").is_file():
+            assert h["post"] == "loaded", h
 
 
 def _b64(a):

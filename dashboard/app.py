@@ -102,6 +102,21 @@ div[data-testid="stDataFrame"] { font-stretch: 87.5%; }
 .mm-readout b { font-stretch: 87.5%; font-size: 1.15rem; }
 .mm-readout .mm-quiet { color: var(--muted); }
 .mm-meta { font-size: 0.98rem; color: var(--ink); margin: 0; }
+.mm-story { font-size: 1.02rem; color: var(--ink); margin: 0.15rem 0 0 0; }
+/* Maps tab control panel */
+.mm-dayhead { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 0.7rem; row-gap: 0.1rem;
+              color: var(--ink); margin: 0.2rem 0 0 0; }
+.mm-dayhead .mm-day { font-size: 2.3rem; font-weight: 720; font-stretch: 125%; line-height: 1; }
+.mm-date { font-size: 1.1rem; font-weight: 600; }
+.mm-tag { font-size: 0.85rem; padding: 0.05rem 0.5rem; border: 1px solid var(--hair); border-radius: 3px;
+          color: var(--muted); background: #fff; }
+.mm-tag-real { color: var(--ink); border-color: var(--ink); }
+.mm-facts p { font-size: 0.98rem; line-height: 1.4; margin: 0 0 0.45rem 0; color: var(--ink); }
+.mm-facts b { font-stretch: 87.5%; }
+/* city names on the big map stay readable over any colour */
+.js-plotly-plot .textpoint text { paint-order: stroke; stroke: #ffffff; stroke-width: 3px; stroke-linejoin: round; }
+/* bigger click targets for the day buttons and click-mode switch (projector, touch, keyboard) */
+div[data-testid="stButtonGroup"] button { min-height: 2.4rem; min-width: 2.6rem; font-size: 1rem; }
 .mm-meta .mm-quiet { color: var(--muted); }
 
 /* model card numbers: a plain row, no cards */
@@ -126,6 +141,7 @@ def _header_html(pill: str) -> str:
 
 
 def main() -> None:
+
     plots.apply_theme()
     st.markdown(CSS, unsafe_allow_html=True)
     header = st.empty()
@@ -152,7 +168,8 @@ def main() -> None:
     else:
         status_slot.error(f"Server down: {START_HINT}.")
 
-    if controls.run_clicked:
+    if tab_maps.wants_run(controls, st.session_state.get("run"), health,
+                          bool(st.session_state.get("live_mode", True))):
         if health is None:
             st.error("The twin server is not reachable, so nothing can be computed. Start it with "
                      "`python serve.py --port 8000` and press Run again.")
@@ -160,12 +177,14 @@ def main() -> None:
             win = get_window(arc, controls.last_day)
             try:
                 with st.spinner("Running the twin (live)…"):
-                    base, base_srv, base_rt = client.run_twin(controls.server_url, win["init_states"], win["doy_sincos"])
+                    base, base_srv, base_rt = client.run_twin(controls.server_url, win["init_states"], win["doy_sincos"],
+                                                              steps=controls.steps)
                     if controls.perturbation is None:
                         shocked, sh_srv, sh_rt = base, base_srv, 0.0
                     else:
                         shocked, sh_srv, sh_rt = client.run_twin(controls.server_url, win["init_states"],
-                                                                 win["doy_sincos"], perturbation=controls.perturbation)
+                                                                 win["doy_sincos"], steps=controls.steps,
+                                                                 perturbation=controls.perturbation)
                 st.session_state["run"] = RunResult(
                     last_day=controls.last_day, window=win, shock_label=controls.shock_label,
                     perturbation=controls.perturbation, base=base, shocked=shocked,

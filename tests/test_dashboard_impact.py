@@ -104,7 +104,9 @@ def live_server():
 @pytest.mark.skipif(not HAVE_DATA, reason="data/india_climate_train.nc not present")
 def test_app_impact_tab_live(live_server):
     from streamlit.testing.v1 import AppTest
-    at = AppTest.from_file(APP, default_timeout=180).run()
+    at = AppTest.from_file(APP, default_timeout=180)
+    at.session_state["live_mode"] = False     # explicit Run button; instructions must show before the first run
+    at.run()
     assert not at.exception
     assert any("crop-stress" in i.value for i in at.info)          # Impact instructions before the first run
     at.text_input(key="server_url").set_value(live_server).run()

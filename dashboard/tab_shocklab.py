@@ -222,7 +222,7 @@ def _render_analysis(ctx, run) -> None:
     left, right = st.columns(2, gap="medium")
     fig = go.Figure()
     for name, key in (("inside box", "inside"), ("near (1–3 cells)", "near"), ("outside", "outside")):
-        fig.add_trace(go.Scatter(x=DAYS[:len(e)], y=reg[key], name=name, mode="lines+markers",
+        fig.add_trace(go.Scatter(x=np.arange(1, len(e) + 1), y=reg[key], name=name, mode="lines+markers",
                                  line=dict(color=REGION_COLORS[key], width=6 if key == "near" else 2.5),
                                  marker=dict(size=11 if key == "near" else 8)))
     fig = style_chart(fig, "Response energy by region", "lead day", "energy (std² summed)")

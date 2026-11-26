@@ -13,11 +13,12 @@ class Controls:
     server_url: str
     last_day: str                       # last input day, YYYY-MM-DD
     channel: str                        # one of common.CHANNELS (display channel for maps)
-    day: int                            # 1..10 lead day to display
+    day: int                            # 1..10 lead day for tabs that need a forecast day (Maps reads its own timeline)
     shock_label: str                    # "none" | "warm_ocean" | "monsoon_stall" | "custom: ..."
     perturbation: Optional[np.ndarray]  # [6,32,36] physical deltas, None for no shock
     run_clicked: bool
     show_wind: bool = True
+    steps: int = 10                     # forecast length asked from the server (the judges score 10)
 
 
 @dataclass
