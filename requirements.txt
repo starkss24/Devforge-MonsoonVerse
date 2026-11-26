@@ -1,0 +1,9 @@
+# Server side. Grader provides its own sandbox; these pins reproduce our local env.
+# On Linux, install CPU torch: pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+numpy==2.5.5
+scipy==1.18.1
+pandas==3.1.1
+xarray==2026.9.0
+torch==2.15.0
+fastapi==0.165.0
+uvicorn==0.54.0

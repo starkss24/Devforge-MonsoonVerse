@@ -1,0 +1,12 @@
+data/
+*.nc
+.venv/
+__pycache__/
+*.pyc
+runs/
+wandb/
+.pytest_cache/
+eval/*.csv
+eval/*.json
+/*.pdf
+.claude/settings.local.json
