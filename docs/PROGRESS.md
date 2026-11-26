@@ -7,12 +7,12 @@ Last updated: 2026-11-26. Source of truth for what is on `main`; per-agent log i
 | Hour | Gate | Status |
 |---|---|---|
 | 0 | Kickoff: repo, Twin stub, validator passes on stub | ✅ Done |
-| 3 | Baselines: loader, year split, baselines CSV; scorer runs on any model | 🟡 Scorer done and run on real data; Junaid's loader/baselines.csv not in repo yet |
+| 3 | Baselines: loader, year split, baselines CSV; scorer runs on any model | ✅ Scorer, loader, year split and `data_tools/baselines.csv` done on real data |
 | 6 | First U-Net beats persistence at day 4, live behind the server | ⏳ Waiting on Aether's weights (server loader ready) |
 | 10 | Architecture freeze; shock tests pass on real boxes | ⏳ Shock tests ready; need the real model |
-| 14 | Impact module + ensemble toggle in dashboard | 🟡 Dashboard + ensemble done; impact module (Junaid) not in repo yet |
+| 14 | Impact module + ensemble toggle in dashboard | ✅ Dashboard, ensemble and Impact tab done |
 | 17 | Code freeze, final weights committed | ⏳ |
-| 19 | Clean-clone test + rehearsal | ⏳ Script ready (`scripts/clean_clone_check.sh`) |
+| 19 | Clean-clone test + rehearsal | 🟡 Clean clone from GitHub passed (2026-11-27); rerun after final weights |
 
 ## By person
 
@@ -30,15 +30,20 @@ Last updated: 2026-11-26. Source of truth for what is on `main`; per-agent log i
 ### Aether — model and training
 - ⏳ Nothing in the repo yet. Needs: training code (+3 repo-scan points), `weights/model.pt` exported per `docs/WEIGHTS.md`
 
-### Junaid — data, baselines, impact, README/brief
-- ⏳ Nothing in the repo yet. Needs: data loader, `baselines.csv`, `impact/crop_stress.py` with tests, brief page 2, demo script
+### Junaid — data, baselines, impact, README/brief (built by Vishwak's agents, on `main`)
+- ✅ `data_tools/`: loader with checks, year split, 3-day windows (reusable for training), `baselines.csv` (leads 1–10, all 1084 validation windows), README figures, `docs/DATA.md`
+- ✅ `impact/`: crop-stress index per approximate farming region (rain deficit vs train-year climatology, daily-mean t2m anomaly hot days, 0–100 index), hand-checked tests, `docs/IMPACT.md`
+- ✅ Dashboard Impact tab: region map, baseline → shocked table, Δ index bars, hot-day threshold slider, honest limits
+- ✅ Drafts: `docs/BRIEF.md` (2-page brief), `docs/DEMO_SCRIPT.md`, `docs/JUDGE_QA.md`; model facts marked `[TO CONFIRM: Aether]`, results `[RESULT]`
+- ⏳ Brief to PDF (2 pages), backup screen recording with the final model
+- Note: organisers' `stats.json` covers 2005–2021 incl. validation years (<1% of std difference); say so in the brief
 
 ### Akash — dashboard (built by Vishwak's agents, on `main`)
 - ✅ `dashboard/`: Streamlit app calling the live server on every Run; sidebar with real start windows, 6 channels, day slider, wind arrows
 - ✅ Shock painter: warm_ocean / monsoon_stall presets + custom box; baseline / shocked / difference maps; day 1–10 animation
 - ✅ Shock Lab: response energy inside/near/outside the box by day, radial spread, kit causality checks, one-click zero-shock check
 - ✅ Ensemble tab (8 runs, small input noise, mean + spread); model card from `eval/scores.csv` with known limits
-- ✅ Impact tab reserved (empty) for Junaid's module; English labels only
+- ✅ Impact tab connected to the crop-stress module; English labels only
 - ✅ Server-down message; route only in `dashboard/client.py` (repo scan: frontend +1, server still separate from UI)
 - ⏳ Visual check at 1280×720 on a projector
 

@@ -19,6 +19,7 @@ for p in (HERE, HERE.parent):
 import client  # noqa: E402
 import sidebar  # noqa: E402
 import tab_ensemble  # noqa: E402
+import tab_impact  # noqa: E402
 import tab_maps  # noqa: E402
 import tab_modelcard  # noqa: E402
 import tab_shocklab  # noqa: E402
@@ -133,8 +134,7 @@ def main() -> None:
     with t_card:
         tab_modelcard.render(ctx)
     with t_imp:
-        st.info("Crop-stress impact panel: reserved for the impact module (impact/crop_stress.py), "
-                "coming from Junaid's lane. No numbers are shown until it is connected.")
+        tab_impact.render(ctx)
 
 
 main()

@@ -10,10 +10,10 @@ our summary is in [docs/CONTRACT.md](docs/CONTRACT.md). Team progress: [docs/PRO
 ```bash
 python -m venv .venv
 # Windows: .venv\Scripts\activate    Linux/macOS: source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt   # Linux: add --extra-index-url https://download.pytorch.org/whl/cpu
 pip install git+https://github.com/OfficialAbhinavSingh/yug-monsoon-kit   # organisers' kit (scoring, validator)
 
-python serve.py --port 8000                               # start the server
+python serve.py --port 8000                               # start the server (blocks: run the rest in a 2nd terminal, venv activated)
 python tools/validate.py --url http://127.0.0.1:8000      # our pre-check
 python -m monsoon_r1.schema_validator http://127.0.0.1:8000   # organisers' validator
 python -m pytest -q                                       # all tests
@@ -27,6 +27,15 @@ Use `127.0.0.1`, not `localhost`, on Windows (localhost adds ~2 s per request).
 Download `india_climate_train.nc` and `stats.json` from the kit's release
 https://github.com/OfficialAbhinavSingh/yug-monsoon-kit/releases/tag/v1.0.0 into `data/` (gitignored).
 Check them against `SHA256SUMS.txt` from the same release.
+
+## Data and baselines
+
+Daily gridded weather fields over India, 2005–2021, on a 1° 32×36 grid with 6 channels (t2m, tp, u10, v10, msl, tcwv).
+We train on 2005–2018 and validate on 2019–2021. Persistence is the better reference at day 1; train-year climatology
+is better from day 3 on, for every channel. Details, the baseline table and the figures are in [docs/DATA.md](docs/DATA.md);
+the impact maths is in [docs/IMPACT.md](docs/IMPACT.md).
+
+![Baseline RMSE vs lead](docs/img/baseline_rmse_vs_lead.png)
 
 ## API
 
@@ -48,7 +57,8 @@ Check them against `SHA256SUMS.txt` from the same release.
 | `docs/WEIGHTS.md` | How to export the model so the server loads it | Aether → Vishwak |
 | `tools/validate.py`, `scripts/` | Pre-checks, repo scan, clean-clone test | Vishwak |
 | model + training code | (to come) | Aether |
-| data scripts, baselines, impact module | (to come) | Junaid |
+| `data_tools/` | Data loader (year split, 3-day windows), baselines, README figures | Junaid (built by Vishwak) |
+| `impact/` | Crop-stress index per farming region (rain deficit, hot days); dashboard Impact tab | Junaid (built by Vishwak) |
 | `dashboard/` | Streamlit app: live maps, shock painter, Shock Lab, ensemble, model card (`streamlit run dashboard/app.py`) | Akash (built by Vishwak) |
 
 ## Working rules
