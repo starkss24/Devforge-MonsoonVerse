@@ -3,11 +3,14 @@
 Run:  python serve.py --port 8000     (listens on 0.0.0.0)
 
 Allowed imports only: numpy, torch (optional), fastapi, uvicorn, stdlib, common, twin.
+Never import monsoon_r1 (the organisers' kit is not in the judge sandbox).
 Writes nothing to disk.
 """
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import logging
 import math
 import time
@@ -19,7 +22,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
 from common import INIT_SHAPE, N_THREADS, STATE_SHAPE, enforce_validity
-from twin import Twin
+from twin import MAX_STEPS, Twin
 
 try:  # torch is optional: persistence backend needs only numpy
     import torch
@@ -29,19 +32,35 @@ except Exception:  # noqa: BLE001 - missing/broken torch must not stop the serve
     torch = None
 
 log = logging.getLogger("serve")
-MAX_STEPS = 60
 
 
 def _bad(msg: str) -> HTTPException:
     return HTTPException(status_code=422, detail=msg)
 
 
+def _decode_b64(value: dict, name: str) -> np.ndarray:
+    """Tolerated wire form {"b64": little-endian float32 bytes, "shape": [...]} (kit contract.decode_array)."""
+    if "b64" not in value or "shape" not in value:
+        raise _bad(f"{name}: array dict needs 'b64' and 'shape'")
+    try:
+        shp = tuple(int(s) for s in value["shape"])
+        if any(s < 0 or s > 100000 for s in shp) or int(np.prod(shp)) > 20_000_000:
+            raise ValueError("array too large")
+        raw = base64.b64decode(value["b64"], validate=True)
+        if len(raw) != int(np.prod(shp)) * 4:
+            raise ValueError("b64 length does not match shape")
+        return np.frombuffer(raw, dtype="<f4").reshape(shp).astype(np.float64)
+    except (ValueError, TypeError, binascii.Error) as e:
+        raise _bad(f"{name}: bad b64 array ({e})")
+
+
 def _as_array(value: Any, name: str, shape: tuple) -> np.ndarray:
-    """Convert a JSON list to float64 with an exact shape and finite values, or raise 422."""
+    """Convert a JSON list (canonical) or b64 dict (tolerated) to float64 with an exact shape
+    and finite values, or raise 422."""
     if value is None:
         raise _bad(f"{name} is required")
     try:
-        arr = np.asarray(value, dtype=np.float64)
+        arr = _decode_b64(value, name) if isinstance(value, dict) else np.asarray(value, dtype=np.float64)
     except (ValueError, TypeError) as e:
         raise _bad(f"{name} must be a numeric nested list of shape {list(shape)} ({e})")
     if arr.shape != tuple(shape):
@@ -69,16 +88,23 @@ def parse_request(body: Any) -> tuple[np.ndarray, np.ndarray, int, Optional[np.n
 
 
 def create_app(twin: Optional[Twin] = None) -> FastAPI:
-    app = FastAPI(title="monsoon-twin")
+    app = FastAPI(title="monsoon-twin", redirect_slashes=False)  # contract: no redirects
+    # Twin() loads + warms up the model here, before uvicorn listens, so the cold start is
+    # absorbed by the judge's /health polling and never by a scored /simulate call.
     app.state.twin = twin if twin is not None else Twin()
     app.state.fallbacks = 0
-    log.info("twin loaded, backend=%s", app.state.twin.backend)
+    log.info("twin loaded, backend=%s model_name=%s", app.state.twin.backend,
+             getattr(app.state.twin, "model_name", "?"))
 
     @app.api_route("/health", methods=["GET", "POST"])
     def health() -> dict:
+        t = app.state.twin
         return {
             "status": "ready",
-            "backend": app.state.twin.backend,
+            "model_name": getattr(t, "model_name", "persistence-stub"),
+            "backend": t.backend,
+            "load_error": getattr(t, "load_error", None),
+            "nonfinite_fallbacks": getattr(t, "nonfinite_fallbacks", 0),
             "torch": torch is not None,
             "fallbacks": app.state.fallbacks,
         }

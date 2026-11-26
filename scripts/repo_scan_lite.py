@@ -3,7 +3,7 @@ import ast, os, subprocess, sys, sys as _s
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ALLOWED = {"torch", "numpy", "scipy", "pandas", "xarray", "sklearn", "lightgbm",
-           "onnxruntime", "fastapi", "flask", "uvicorn"}
+           "onnxruntime", "fastapi", "flask", "uvicorn", "gunicorn"}  # R1_CONTRACT.md list
 LOCAL = {"common", "twin", "serve"}
 CHECKED = ["serve.py", "common.py", "twin.py"]
 MAX = 50 * 1024 * 1024

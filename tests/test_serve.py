@@ -44,6 +44,42 @@ def test_health(client, method):
     assert r.status_code == 200
     assert r.json()["status"] == "ready"
     assert r.json()["backend"] in ("persistence", "model")
+    assert isinstance(r.json()["model_name"], str) and r.json()["model_name"]
+
+
+def _b64(a):
+    import base64
+    a = np.ascontiguousarray(a, dtype="<f4")
+    return {"b64": base64.b64encode(a.tobytes()).decode("ascii"), "shape": list(a.shape)}
+
+
+def test_b64_input_tolerated(client):
+    lists = np.asarray(client.post("/simulate", json=_req()).json()["rollout"])
+    req = _req()
+    req["init_states"] = _b64(_init())
+    req["perturbation"] = _b64(np.zeros(STATE_SHAPE))
+    r = client.post("/simulate", json=req)
+    assert r.status_code == 200
+    out = np.asarray(r.json()["rollout"])
+    assert out.shape == lists.shape and np.allclose(out, lists, rtol=1e-6, atol=1e-2)
+
+
+def test_b64_bad_length_422(client):
+    req = _req()
+    bad = _b64(_init())
+    bad["shape"] = [3, 6, 32, 35]
+    req["init_states"] = bad
+    assert client.post("/simulate", json=req).status_code == 422
+
+
+@pytest.mark.parametrize("steps", [1, 10, 14])
+def test_kit_step_range(client, steps):
+    out = np.asarray(client.post("/simulate", json=_req(steps=steps)).json()["rollout"])
+    assert out.shape == (steps, *STATE_SHAPE)
+
+
+def test_no_trailing_slash_redirect(client):
+    assert client.post("/health/", follow_redirects=False).status_code != 307
 
 
 def test_simulate_shape_and_validity(client):
