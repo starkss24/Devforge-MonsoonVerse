@@ -228,7 +228,8 @@ def test_shock_cells_and_preset_channels():
     last = np.full(STATE_SHAPE, 50.0)
     assert tab_maps.shock_cells(None) == 0
     assert tab_maps.shock_cells(make_shock("warm_ocean", last)) == box_mask(*BOXES["warm_ocean"]).sum()
-    assert sidebar.SHOCK_CHANNEL == {"warm_ocean": "t2m", "monsoon_stall": "u10"}
+    assert sidebar.SHOCK_CHANNEL["warm_ocean"] == "t2m" and sidebar.SHOCK_CHANNEL["monsoon_stall"] == "u10"
+    assert set(sidebar.SHOCK_CHANNEL) == set(sidebar.PRESETS) - {"none", "custom"}   # every shock preset
 
 
 # ---------- AppTest (headless app) ----------
@@ -269,15 +270,17 @@ def _apptest():
 
 @pytest.mark.skipif(not HAVE_DATA, reason="data/india_climate_train.nc not present")
 def test_app_live_warm_ocean_run(live_server):
-    at = _apptest().run()
+    at = _apptest()
+    at.session_state["live_mode"] = False     # this test covers the explicit Run button (Live has its own test)
+    at.run()
     assert not at.exception
     assert any("Run the twin" in i.value for i in at.info)  # instructions before the first run
-    assert at.selectbox(key="channel").value == "tp"
-    assert at.segmented_control(key="lead_day").value == 1
+    assert at.segmented_control(key="channel").value == "tp"
+    assert at.select_slider(key="lead_day").value == 1
 
     at.text_input(key="server_url").set_value(live_server).run()
     at.radio(key="shock_preset").set_value("warm_ocean").run()
-    assert at.selectbox(key="channel").value == "t2m"   # display follows the shocked channel
+    assert at.segmented_control(key="channel").value == "t2m"   # display follows the shocked channel
     at.button(key="run_button").click().run()
     assert not at.exception, at.exception
     assert not at.error, [e.value for e in at.error]
@@ -288,16 +291,16 @@ def test_app_live_warm_ocean_run(live_server):
     assert len(charts) >= 3
     assert any("How to read this" in c.value for c in at.caption)
     # channel/day change re-slices without a new server call; the user's channel choice sticks
-    at.selectbox(key="channel").set_value("tp").run()
-    at.segmented_control(key="lead_day").set_value(5).run()
+    at.segmented_control(key="channel").set_value("tp").run()
+    at.select_slider(key="lead_day").set_value(5).run()
     assert not at.exception and at.session_state["run"] is run
     assert any("Day 5" in m.value for m in at.markdown)          # the readout follows the chosen day
-    assert at.selectbox(key="channel").value == "tp"
+    assert at.segmented_control(key="channel").value == "tp"
     assert not any("Press Run to update" in w.value for w in at.warning)
     # shock change -> stale warning, display switches to the newly shocked channel
     at.radio(key="shock_preset").set_value("monsoon_stall").run()
     assert any("Press Run to update" in w.value for w in at.warning)
-    assert at.selectbox(key="channel").value == "u10"
+    assert at.segmented_control(key="channel").value == "u10"
 
 
 @pytest.mark.skipif(not HAVE_DATA, reason="data/india_climate_train.nc not present")
@@ -310,8 +313,9 @@ def test_app_custom_shock_preview_renders():
 
 @pytest.mark.skipif(not HAVE_DATA, reason="data/india_climate_train.nc not present")
 def test_app_server_down_shows_clear_error():
-    at = _apptest().run()
-    at.text_input(key="server_url").set_value(f"http://127.0.0.1:{_free_port()}").run()
+    at = _apptest()
+    at.session_state["server_url"] = f"http://127.0.0.1:{_free_port()}"   # dead from the first run, whatever
+    at.run()                                                             # is listening on the default port
     at.button(key="run_button").click().run()
     assert not at.exception
     assert any("not reachable" in e.value for e in at.error)
