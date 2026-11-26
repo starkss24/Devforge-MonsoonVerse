@@ -12,10 +12,10 @@
 ## Code interface
 - `common.py`: channel order, grid (`LATS`, `LONS`), validity bounds, `BOXES`, `box_mask()`, `make_shock()`, `doy_sincos()`, `enforce_validity()`.
 - `twin.py`: `Twin().rollout(init_states, doy_sincos, steps=10, perturbation=None) -> [steps,6,32,36]`. Signature frozen.
-  Backend "model" if `weights/model.pt` (TorchScript, see `docs/WEIGHTS.md`) loads and warms up, otherwise "persistence".
+  Backend "onnx" if `weights/model.onnx` loads (onnxruntime, preferred), else "torchscript" if `weights/model.pt` loads, otherwise "persistence" (see `docs/WEIGHTS.md`; override with env TWIN_BACKEND).
 
 ## HTTP API (serve.py, repo root, 0.0.0.0, `python serve.py --port 8000`)
-- `POST /health` (GET also works) -> `{"status": "ready", "model_name": str, "backend": "persistence"|"model", "load_error", "nonfinite_fallbacks", "torch", "fallbacks"}`.
+- `POST /health` (GET also works) -> `{"status": "ready", "model_name": str, "backend": "onnx"|"torchscript"|"persistence", "load_error", "nonfinite_fallbacks", "torch", "fallbacks"}`.
   The model loads and warms up before the server listens, so the cold start falls inside the judge's /health polling (120 s).
 - `POST /simulate` body: `{"init_states": [3][6][32][36], "doy_sincos": [s, c], "steps": 10, "perturbation": null | [6][32][36]}`
   -> `{"rollout": [steps][6][32][36], "inference_ms": float}`. Arrays are nested lists (canonical); `{"b64","shape"}` input is tolerated.

@@ -1,12 +1,13 @@
-"""Sidebar controls: shock painter + Run, window, settings; display options (channel, day, wind) in a row.
+"""Sidebar controls: shock painter + Run, window, settings. Display options live on the Maps tab.
 
 Returns a state.Controls each rerun. No server calls here (only dashboard/client.py talks to the server).
 Pure helpers (build_custom_shock, custom_label, preset_shock, snap_day, status_pill, default_server_url)
 are importable for tests.
 
-Layout (top to bottom): status badge (filled by app.py into `status_slot`), shock painter, Run button,
-window date, collapsed Settings (server URL). Channel / lead day / wind arrows go into `display` (a main-area
-container from app.py) when given, else into the sidebar.
+Layout (top to bottom): status line (filled by app.py into `status_slot`), shock painter, Run button,
+window date, collapsed Settings (server URL). The display channel, lead day and wind toggle are widgets on the
+Maps tab (keys channel, lead_day, show_wind, drawn by tab_maps.render_display_controls); this module only reads
+their values from session state, so the Controls handed to every tab are known before any tab draws.
 """
 from __future__ import annotations
 
@@ -28,8 +29,8 @@ SERVER_ENV = "DASHBOARD_SERVER_URL"
 PRESETS = ("none", "warm_ocean", "monsoon_stall", "custom")
 PRESET_TEXT = {
     "none": "No shock (baseline only)",
-    "warm_ocean": "Warm ocean · Bay of Bengal +3 K, +15% moisture",
-    "monsoon_stall": "Monsoon stall · Arabian Sea winds -40%",
+    "warm_ocean": "Warm ocean: Bay of Bengal +3 K, +15% moisture",
+    "monsoon_stall": "Monsoon stall: Arabian Sea winds −40%",
     "custom": "Custom box",
 }
 # Display channel picked automatically when a preset shock is chosen (the user can change it afterwards).
@@ -37,10 +38,11 @@ SHOCK_CHANNEL = {"warm_ocean": "t2m", "monsoon_stall": "u10"}
 CUSTOM_DEFAULTS = {"t2m": 3.0, "tp": 10.0, "u10": -3.0, "v10": -3.0, "msl": -300.0, "tcwv": 5.0}
 CHANNEL_NAMES = {"t2m": "2 m temperature", "tp": "Precipitation", "u10": "10 m wind (east-west)",
                  "v10": "10 m wind (north-south)", "msl": "Sea-level pressure", "tcwv": "Column water vapour"}
+DEFAULT_CHANNEL = "tp"
 
 
 def channel_label(ch: str) -> str:
-    return f"{ch} · {CHANNEL_NAMES[ch]} ({UNITS[ch]})"
+    return f"{CHANNEL_NAMES[ch]} ({ch}, {UNITS[ch]})"
 
 
 def default_server_url() -> str:
@@ -48,13 +50,14 @@ def default_server_url() -> str:
 
 
 def status_pill(health, error: str | None = None) -> str:
-    """Small HTML status pill: green 'Server ready · model' or red 'Server down'."""
+    """Small HTML status line: green dot 'Server ready, running <model>' or red dot 'Server down'."""
     if health is not None:
         name = html.escape(str(health.get("model_name", "?")))
-        return f'<span class="mm-pill mm-ok" title="backend: {html.escape(str(health.get("backend", "?")))}">' \
-               f'● Server ready · {name}</span>'
+        backend = html.escape(str(health.get("backend", "?")))
+        return (f'<span class="mm-pill mm-ok" title="backend: {backend}"><span class="mm-dot"></span>'
+                f'Server ready, running {name}</span>')
     tip = html.escape(error or "not reachable")
-    return f'<span class="mm-pill mm-down" title="{tip}">● Server down</span>'
+    return f'<span class="mm-pill mm-down" title="{tip}"><span class="mm-dot"></span>Server down</span>'
 
 
 def snap_day(valid_days: np.ndarray, wanted) -> str:
@@ -113,26 +116,27 @@ def _on_custom_channel_change() -> None:
     st.session_state["channel"] = st.session_state.get("custom_channel", CHANNELS[0])
 
 
-def render_display_controls(where) -> tuple[str, int, bool]:
-    """Channel, lead day and wind toggle in one horizontal row inside `where` (keys: channel, lead_day, show_wind)."""
-    st.session_state.setdefault("channel", "tp")
-    c1, c2, c3 = where.columns([2.2, 2.6, 1.0], gap="medium", vertical_alignment="bottom")
-    channel = c1.selectbox("Display channel", CHANNELS, format_func=channel_label, key="channel")
-    day = c2.slider("Lead day", 1, 10, 1, key="lead_day")
-    show_wind = c3.toggle("Wind arrows", value=True, key="show_wind")
-    return channel, int(day), bool(show_wind)
+def display_state() -> tuple[str, int, bool]:
+    """Current display channel, lead day (1..10) and wind toggle, as last set on the Maps tab."""
+    ss = st.session_state
+    ss.setdefault("channel", DEFAULT_CHANNEL)
+    ch = ss.get("channel") if ss.get("channel") in CHANNELS else DEFAULT_CHANNEL
+    try:
+        day = int(ss.get("lead_day") or 1)
+    except (TypeError, ValueError):
+        day = 1
+    return ch, min(max(day, 1), 10), bool(ss.get("show_wind", True))
 
 
 def render_sidebar(arc, status_slot=None, display=None) -> Controls:
-    """status_slot: an st.empty() already in the sidebar (app.py fills it). display: container for the display row."""
+    """status_slot: an st.empty() already in the sidebar (app.py fills it). `display` is accepted for
+    backwards compatibility and ignored: the display widgets are drawn by the Maps tab."""
     sb = st.sidebar
     painter = sb.container()
     run_box = sb.container()
     preview = sb.container()   # custom-box preview sits under Run, so Run stays above the fold
     window = sb.container()
     settings = sb.expander("Settings", expanded=False)
-    if display is None:
-        display = sb.container()
 
     server_url = settings.text_input("Twin server URL", value=default_server_url(), key="server_url")
 
@@ -144,7 +148,7 @@ def render_sidebar(arc, status_slot=None, display=None) -> Controls:
                                help="The twin starts from the 3 real days ending here and runs 10 days ahead.")
     last_day = snap_day(valid, picked)
     if last_day != str(picked):
-        window.caption(f"{picked} is not in the archive; using {last_day}.")
+        window.caption(f"{picked} is not in the archive, so the window ends on {last_day} instead.")
 
     preset = painter.radio("Shock painter", PRESETS, format_func=lambda p: PRESET_TEXT[p], key="shock_preset",
                            on_change=_on_preset_change)
@@ -173,20 +177,20 @@ def render_sidebar(arc, status_slot=None, display=None) -> Controls:
         label = custom_label(lat_range, lon_range, cch, mag, mode)
         box = (lat_range[0], lat_range[1], lon_range[0], lon_range[1])
         if not box_mask(*box).any():
-            painter.warning("The box contains no grid cells; widen it.")
+            painter.warning("The box holds no grid cells. Widen it with the two sliders above.")
             perturbation = None
         else:
             c = CH[cch]
             fig = plots.diff_map(plots.to_display(cch, perturbation[c], is_diff=True), lats, lons,
                                  "Shock preview (Δ)", plots.display_units(cch), box=box, height=270,
                                  coast=arc.static[0], colorbar="bottom")
-            preview.plotly_chart(fig, key="shock_preview", config={"displayModeBar": False})
+            preview.plotly_chart(fig, key="shock_preview", config={"displayModeBar": False}, theme=None)
 
     if box is not None and preset != "custom":
         painter.caption(f"Box: lat {box[0]:g}–{box[1]:g}°N, lon {box[2]:g}–{box[3]:g}°E")
 
-    run_clicked = run_box.button("▶ Run the twin", type="primary", width="stretch", key="run_button")
+    run_clicked = run_box.button("Run the twin", type="primary", width="stretch", key="run_button")
 
-    channel, day, show_wind = render_display_controls(display)
+    channel, day, show_wind = display_state()
     return Controls(server_url=server_url, last_day=last_day, channel=channel, day=int(day), shock_label=label,
                     perturbation=perturbation, run_clicked=bool(run_clicked), show_wind=bool(show_wind))

@@ -13,6 +13,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 import streamlit as st
 
+import plots
 from common import CHANNELS
 from tab_shocklab import BAD, CHANNEL_COLORS, CHART_H, GOOD, NO_BAR, style_chart
 
@@ -52,16 +53,14 @@ def scorecard(rows: list[dict], leads=(1, 4, 8)) -> list[dict]:
     return out
 
 
-def _tile(label: str, value: str, sub: str, color: str) -> str:
-    return (f'<div style="border:1px solid rgba(128,128,128,0.3);border-left:6px solid {color};border-radius:8px;'
-            f'padding:10px 14px;height:100%">'
-            f'<div style="font-size:15px;opacity:0.8">{label}</div>'
-            f'<div style="font-size:34px;font-weight:700;color:{color};line-height:1.2">{value}</div>'
-            f'<div style="font-size:13px;opacity:0.75">{sub}</div></div>')
+def _score(label: str, value: str, sub: str, cls: str) -> str:
+    """One number in the scorecard row: big semi-condensed figure, plain label under it (no card)."""
+    return (f'<div class="mm-score"><div class="mm-num {cls}">{value}</div>'
+            f'<div class="mm-lab">{label}: {sub}</div></div>')
 
 
-def _skill_color(v: float) -> str:
-    return GOOD if v > 0 else BAD if v < 0 else "#6b7280"
+def _skill_class(v: float) -> str:
+    return "mm-pass" if v > 0 else "mm-fail" if v < 0 else "mm-even"
 
 
 def render(ctx) -> None:
@@ -73,7 +72,7 @@ def render(ctx) -> None:
                  "repeats the last input day. It is a placeholder until the trained model is loaded, so skill "
                  "versus persistence is exactly 0 by construction.")
     else:
-        st.info(f"Live server backend: `{backend}` · model `{model_name}`")
+        st.info(f"Live server backend `{backend}`, model `{model_name}`.")
 
     if not SCORES.is_file():
         st.warning("eval/scores.csv was not found, so no offline skill numbers are shown. Generate it with:")
@@ -105,16 +104,17 @@ def _render_scores() -> None:
     in_band = sum(BAND[0] <= v <= BAND[1] for _, v in vr)
 
     # ---- scorecard
-    st.markdown("#### Scorecard · skill vs the better baseline (persistence or climatology)")
+    st.markdown("#### Scorecard: skill against the better baseline (persistence or climatology)")
     cards = scorecard(rows, [lead for lead in (1, 4, 8) if lead in leads])
-    cols = st.columns(len(cards) + 1, gap="small")
-    for col, sc in zip(cols, cards):
+    items = []
+    for sc in cards:
         v = sc["skill"]
-        col.markdown(_tile(f"Day {sc['lead']}", f"{v:+.2f}",
-                           "beats the baseline" if v > 0 else "worse than the baseline" if v < 0 else "ties the baseline",
-                           _skill_color(v)), unsafe_allow_html=True)
-    cols[-1].markdown(_tile(f"Day-{vr_lead} sharpness", f"{in_band}/{len(vr)}", "channels in the 40–250% variance band",
-                            GOOD if in_band == len(vr) else BAD), unsafe_allow_html=True)
+        items.append(_score(f"Day {sc['lead']}", f"{v:+.2f}",
+                            "beats the baseline" if v > 0 else "worse than the baseline" if v < 0
+                            else "ties the baseline", _skill_class(v)))
+    items.append(_score(f"Day-{vr_lead} sharpness", f"{in_band}/{len(vr)}", "channels in the 40–250% variance band",
+                        "mm-pass" if in_band == len(vr) else "mm-fail"))
+    st.markdown(f'<div class="mm-scores">{"".join(items)}</div>', unsafe_allow_html=True)
     st.caption("Mean over the 6 channels of 1 − RMSE / RMSE of the better reference. Above 0 beats it; "
                "+0.12 earns full points.")
 
@@ -127,12 +127,12 @@ def _render_scores() -> None:
             fig.add_trace(go.Bar(x=[f"day {lead}" for lead in leads], y=series(col, ch), name=ch,
                                  marker_color=CHANNEL_COLORS[ch],
                                  hovertemplate=ch + ": %{y:+.3f}<extra></extra>"))
-        fig.add_hline(y=0, line_color="#666666", line_width=1)
+        fig.add_hline(y=0, line_color=plots.MUTED, line_width=1)
         vals = [v for ch in CHANNELS for v in series(col, ch) if v == v]
         if vals and all(v == 0 for v in vals):
             fig.add_annotation(x=0.5, y=0.78, xref="paper", yref="paper", showarrow=False, font=dict(size=15),
                                text="0 at every lead: the forecast is persistence itself")
-        where.plotly_chart(_layout(fig, title, "skill (> 0 beats it)"), key=key, config=NO_BAR)
+        where.plotly_chart(_layout(fig, title, "skill (> 0 beats it)"), key=key, config=NO_BAR, theme=None)
 
     left, right = st.columns(2, gap="medium")
     fig = go.Figure()
@@ -141,10 +141,10 @@ def _render_scores() -> None:
                                  line=dict(color=CHANNEL_COLORS[ch], width=2.5), marker=dict(size=8)))
     fig.add_hline(y=0.12, line_dash="dot", line_color=GOOD, annotation_text="full points +0.12",
                   annotation_position="top left", annotation_font=dict(size=13))
-    fig.add_hline(y=0, line_color="#666666", line_width=1)
+    fig.add_hline(y=0, line_color=plots.MUTED, line_width=1)
     fig = _layout(fig, "Skill vs the better reference (judged)", "skill score")
     fig.update_xaxes(tickvals=leads, ticktext=[f"day {lead}" for lead in leads])
-    left.plotly_chart(fig, key="mc_ss", config=NO_BAR)
+    left.plotly_chart(fig, key="mc_ss", config=NO_BAR, theme=None)
 
     ymax = max(100 * BAND[1] * 1.12, max((100 * v for _, v in vr if v == v), default=0) * 1.15)
     fig = go.Figure(go.Bar(x=[c for c, _ in vr], y=[100 * v for _, v in vr],
@@ -160,9 +160,9 @@ def _render_scores() -> None:
     fig = _layout(fig, f"Day-{vr_lead} variance ratio (forecast ÷ truth)", "% of real variance")
     fig.update_layout(showlegend=False)
     fig.update_yaxes(range=[0, ymax])
-    right.plotly_chart(fig, key="mc_var", config=NO_BAR)
+    right.plotly_chart(fig, key="mc_var", config=NO_BAR, theme=None)
 
-    st.markdown("**Heavy rain (tp > 10 mm/day) · CSI skill**")
+    st.markdown("#### Heavy rain (tp > 10 mm/day): CSI skill")
     tp = {int(r["lead"]): r for r in rows if r["channel"] == "tp"}
     csi_rows = [{"lead day": lead, "CSI model": _f(tp[lead]["csi_model"]), "CSI persistence": _f(tp[lead]["csi_persist"]),
                  "CSI climatology": _f(tp[lead]["csi_clim"]), "CSI skill": _f(tp[lead]["csi_skill"])}
@@ -173,10 +173,10 @@ def _render_scores() -> None:
     st.caption("CSI = hits / (hits + misses + false alarms). CSI skill > 0 beats the better of persistence and "
                "climatology; +0.10 earns full points. Variance ratio below 40% means a blurry forecast, above 250% "
                "inflated noise.")
-    st.caption(f"Source: `eval/scores.csv` written by our scorer (eval/score.py, organisers' metric code) · "
-               f"file time {mtime} · backend `{summ.get('backend', 'not recorded')}` · "
-               f"windows pooled: {', '.join(n_win)} (validation 2019–2021; climatology 2005–2018). "
-               f"Regenerate with `{GEN_CMD}`.")
+    st.caption(f"Source: `eval/scores.csv`, written by our scorer (eval/score.py, organisers' metric code) on "
+               f"{mtime} with backend `{summ.get('backend', 'not recorded')}`. Windows pooled: {', '.join(n_win)} "
+               f"(validation 2019–2021; climatology 2005–2018). Regenerate with `{GEN_CMD}`.")
+
 
 
 def _render_limits(backend: str) -> None:

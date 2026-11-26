@@ -118,9 +118,20 @@ def test_diff_map_symmetric_and_animation_frames():
     z = np.zeros((32, 36))
     assert plots.diff_map(z, LATS, LONS, "d", "K").data[0].zmax > 0  # no zero-width range
     diffs = np.stack([d * (k + 1) for k in range(10)])
-    anim = plots.diff_animation(diffs, LATS, LONS, "Δ", "K")
-    assert len(anim.frames) == 10 and anim.data[0].zmax == pytest.approx(40.0)
-    assert anim.layout.updatemenus and anim.layout.sliders
+    strip = plots.diff_strip(diffs, LATS, LONS, "K", box=(8.5, 19.5, 82.5, 93.5), selected=3)
+    hms = [t for t in strip.data if t.type == "heatmap"]
+    assert len(hms) == 10                                            # one small map per day
+    assert all(h.zmax == pytest.approx(40.0) and h.zmin == pytest.approx(-40.0) for h in hms)  # one shared scale
+    assert sum(bool(h.showscale) for h in hms) == 1                  # one colourbar for the strip
+    np.testing.assert_array_equal(hms[9].z, diffs[9])
+    hits = [t for t in strip.data if t.type == "scatter" and t.customdata is not None]
+    assert [int(t.customdata[0]) for t in hits] == list(range(1, 11))   # a click on panel k reads back day k
+    sel = [s for s in strip.layout.shapes if s.name == "selected_day"]
+    assert len(sel) == 1 and sel[0].line.color == plots.TURMERIC
+    dom = strip.layout.xaxis3.domain
+    assert sel[0].x0 < dom[0] < dom[1] < sel[0].x1                   # outline sits round day 3
+    boxes = [s for s in strip.layout.shapes if s.name != "selected_day"]
+    assert len(boxes) == 10 and all(s.line.color == plots.TURMERIC for s in boxes)
 
 
 def test_diff_map_no_change_is_clean_and_annotated():
@@ -133,16 +144,33 @@ def test_diff_map_no_change_is_clean_and_annotated():
     small[3, 3] = 0.5
     fig2 = plots.diff_map(small, LATS, LONS, "d", "K", empty_text="No change")
     assert fig2.data[0].zmax == 0.5 and not fig2.layout.annotations  # real change: no note, own range
-    assert plots.diff_animation(np.zeros((10, 32, 36)), LATS, LONS, "Δ", "K").data[0].zmax == 1.0
+    assert plots.diff_strip(np.zeros((10, 32, 36)), LATS, LONS, "K").data[0].zmax == 1.0
+
+
+def test_day_from_selection():
+    import tab_maps
+    assert tab_maps.day_from_selection({"selection": {"points": [{"customdata": 8, "x": 70.5}]}}) == 8
+    assert tab_maps.day_from_selection({"selection": {"points": [{"customdata": [4]}]}}) == 4
+    assert tab_maps.day_from_selection({"selection": {"points": [{"x": 1}]}}) is None    # e.g. a coast point
+    assert tab_maps.day_from_selection({"selection": {"points": []}}) is None
+    assert tab_maps.day_from_selection(None) is None
+    assert tab_maps.day_from_selection({"selection": {"points": [{"customdata": 11}]}}) is None
 
 
 def test_field_map_coast_colorbar_and_places():
     mask = (np.add.outer(np.zeros_like(LATS), LONS) < 80).astype(float)   # land west of 80°E
     f = np.random.default_rng(1).normal(size=(32, 36))
     fig = plots.field_map(f, LATS, LONS, "t", "K", coast=mask, colorbar="bottom", places=True)
-    coast = [t for t in fig.data if t.type == "contour"]
-    assert len(coast) == 1 and coast[0].contours.start == coast[0].contours.end == 0.5
-    assert coast[0].contours.coloring == "none" and coast[0].showscale is False
+    if plots.OUTLINE_PATH.is_file():   # bundled Natural Earth outline replaces the grid contour
+        outline = [t for t in fig.data if t.name == "outline"]
+        assert len(outline) == 1 and outline[0].mode == "lines" and len(outline[0].x) > 100
+        assert not any(t.type == "contour" for t in fig.data)
+    else:
+        coast = [t for t in fig.data if t.type == "contour"]
+        assert len(coast) == 1 and coast[0].contours.start == coast[0].contours.end == 0.5
+        assert coast[0].contours.coloring == "none" and coast[0].showscale is False
+    c = plots.coastline_trace(mask, LATS, LONS)     # the grid-mask fallback itself
+    assert c.contours.start == c.contours.end == 0.5 and c.contours.coloring == "none" and c.showscale is False
     cb = fig.data[0].colorbar
     assert cb.orientation == "h" and cb.title.text == "K" and cb.thickness <= 12
     texts = " ".join(a.text for a in fig.layout.annotations)
@@ -150,7 +178,7 @@ def test_field_map_coast_colorbar_and_places():
     assert fig.layout.yaxis.scaleanchor == "x" and fig.layout.xaxis.title.text is None
     # diff_map forwards the extras (other tabs pass coast= to it)
     d = plots.diff_map(f, LATS, LONS, "d", "K", coast=mask)
-    assert any(t.type == "contour" for t in d.data)
+    assert any(t.type == "contour" or t.name == "outline" for t in d.data)
     assert plots.add_coast(plots.field_map(f, LATS, LONS, "t", "K"), None, LATS, LONS).data[-1].type == "heatmap"
 
 
@@ -185,6 +213,8 @@ def test_wind_ref_fixed_scale_and_key():
 def test_status_pill_and_server_url_env(monkeypatch):
     ok = sidebar.status_pill({"model_name": "twin-<v1>", "backend": "onnx"})
     assert "Server ready" in ok and "twin-&lt;v1&gt;" in ok and "mm-ok" in ok
+    assert "·" not in ok and "·" not in sidebar.channel_label("t2m")
+    assert not any("·" in t for t in sidebar.PRESET_TEXT.values())
     down = sidebar.status_pill(None, "connection refused")
     assert "Server down" in down and "mm-down" in down
     monkeypatch.delenv(sidebar.SERVER_ENV, raising=False)
@@ -243,6 +273,8 @@ def test_app_live_warm_ocean_run(live_server):
     assert not at.exception
     assert any("Run the twin" in i.value for i in at.info)  # instructions before the first run
     assert at.selectbox(key="channel").value == "tp"
+    assert at.segmented_control(key="lead_day").value == 1
+
     at.text_input(key="server_url").set_value(live_server).run()
     at.radio(key="shock_preset").set_value("warm_ocean").run()
     assert at.selectbox(key="channel").value == "t2m"   # display follows the shocked channel
@@ -257,8 +289,9 @@ def test_app_live_warm_ocean_run(live_server):
     assert any("How to read this" in c.value for c in at.caption)
     # channel/day change re-slices without a new server call; the user's channel choice sticks
     at.selectbox(key="channel").set_value("tp").run()
-    at.slider(key="lead_day").set_value(5).run()
+    at.segmented_control(key="lead_day").set_value(5).run()
     assert not at.exception and at.session_state["run"] is run
+    assert any("Day 5" in m.value for m in at.markdown)          # the readout follows the chosen day
     assert at.selectbox(key="channel").value == "tp"
     assert not any("Press Run to update" in w.value for w in at.warning)
     # shock change -> stale warning, display switches to the newly shocked channel

@@ -40,7 +40,7 @@ def _run_ensemble(ctx, frac: float, use_shock: bool, n_members: int = N_MEMBERS)
         roll, _, _ = client.run_twin(c.server_url, init, win["doy_sincos"], perturbation=pert)
         members.append(roll)
         bar.progress((m + 1) / n_members,
-                     text=f"Member {m + 1} of {n_members} done · {time.perf_counter() - t0:.1f} s (live calls)")
+                     text=f"Member {m + 1} of {n_members} done, {time.perf_counter() - t0:.1f} s so far (live calls)")
     bar.empty()
     st.session_state["ensemble"] = {
         "members": np.stack(members), "last_day": win["last_day"], "frac": frac,
@@ -50,7 +50,7 @@ def _run_ensemble(ctx, frac: float, use_shock: bool, n_members: int = N_MEMBERS)
 
 
 def render(ctx) -> None:
-    st.subheader("Ensemble · how sure is the forecast?")
+    st.subheader("Ensemble: how sure is the forecast?")
     st.markdown("The server is deterministic, so we nudge the 3 starting days with tiny random noise and make one "
                 "live call per member: **where the members disagree, the forecast is less certain.**")
     c = ctx.controls
@@ -60,9 +60,10 @@ def render(ctx) -> None:
     pct = col2.slider("Input noise (% of channel std)", 0.1, 2.0, 0.5, 0.1, key="ens_noise_pct")
     use_shock = col3.checkbox(f"Include current shock ({c.shock_label})", value=False, disabled=not has_shock,
                               key="ens_use_shock")
-    if st.button(f"▶ Run {n_members}-member ensemble", type="primary", key="ens_run_button"):
+    if st.button(f"Run {n_members}-member ensemble", type="primary", key="ens_run_button"):
         if ctx.health is None:
-            st.error("The twin server is not reachable, so the ensemble cannot run.")
+            st.error("The twin server is not reachable, so the ensemble cannot run. Start it with "
+                     "`python serve.py --port 8000` and press the button again.")
         else:
             try:
                 _run_ensemble(ctx, pct / 100.0, use_shock and has_shock, n_members)
@@ -77,9 +78,9 @@ def render(ctx) -> None:
     mem = ens["members"]
     n = mem.shape[0]
     std = np.asarray(ctx.archive.std, np.float64)
-    st.success(f"**{n} live calls in {ens['seconds']:.2f} s total** ({ens['seconds'] / n:.2f} s each) · "
-               f"window ending {ens['last_day']} · noise {100 * ens['frac']:.1f}% of std · "
-               f"shock: {ens['shock_label']}")
+    st.success(f"**{n} live calls in {ens['seconds']:.2f} s total** ({ens['seconds'] / n:.2f} s each). "
+               f"Window ending {ens['last_day']}, noise {100 * ens['frac']:.1f}% of std, "
+               f"shock {ens['shock_label']}.")
     if ens["last_day"] != c.last_day:
         st.warning("The sidebar window changed since this ensemble ran; press the button again to refresh it.")
 
@@ -93,14 +94,15 @@ def render(ctx) -> None:
     coast = land_sea(ctx)
     left, right = st.columns(2, gap="medium")
     left.plotly_chart(map_fig(plots.field_map, plots.to_display(ch, mean), lats, lons,
-                              f"Ensemble mean · {ch} · day {day}", units,
+                              f"Ensemble mean of {ch}, day {day}", units,
                               cmap=plots.CHANNEL_CMAPS.get(ch, "Viridis"), box=box, height=MAP_H, coast=coast),
-                      key="ens_mean_map", config=NO_BAR)
+                      key="ens_mean_map", config=NO_BAR, theme=None)
     right.plotly_chart(map_fig(plots.field_map, plots.to_display(ch, spread, is_diff=True), lats, lons,
-                               f"Spread (std across members) · {ch} · day {day}", units.split(" (")[0],
-                               cmap="Oranges", zmin=0.0, box=box, height=MAP_H, coast=coast),
-                       key="ens_spread_map", config=NO_BAR)
-    st.caption("Channel and lead day come from the sidebar. Darker orange = members disagree more.")
+                               f"Spread across members, {ch}, day {day}", units.split(" (")[0],
+                               cmap="Purples", zmin=0.0, box=box, height=MAP_H, coast=coast),
+                       key="ens_spread_map", config=NO_BAR, theme=None)
+    st.caption("Channel and lead day are the ones chosen on the Maps tab. Darker purple means the members "
+               "disagree more.")
 
     sp = M.spread_by_day(mem, std)                    # [steps, 6]
     fig = go.Figure()
@@ -109,10 +111,11 @@ def render(ctx) -> None:
         fig.add_trace(go.Scatter(x=days, y=sp[:, i], name=name, mode="lines+markers",
                                  line=dict(color=CHANNEL_COLORS[name], width=2.5), marker=dict(size=8)))
     fig = style_chart(fig, "Spread vs lead day (ensemble std ÷ channel std)", "lead day", "spread (channel std)")
-    fig.add_hline(y=ens["frac"], line_dash="dot", line_color="#666666", annotation_text="input noise level",
+    fig.add_hline(y=ens["frac"], line_dash="dot", line_color=plots.MUTED, annotation_text="input noise level",
                   annotation_position="top left", annotation_font=dict(size=13))
     fig.update_xaxes(dtick=1)
     fig.update_yaxes(range=[0, 1.3 * max(float(np.nanmax(sp)), ens["frac"])])
-    st.plotly_chart(fig, key="ens_spread_line", config=NO_BAR)
+    st.plotly_chart(fig, key="ens_spread_line", config=NO_BAR, theme=None)
+
     st.caption("Flat near the input noise level: the model damps small errors. Growing with lead day: small "
                "starting differences are amplified, as in real weather.")

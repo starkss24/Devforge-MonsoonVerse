@@ -1,10 +1,12 @@
-"""Tests for twin.py's TorchScript weights contract (docs/WEIGHTS.md), using dummy modules in a temp dir."""
+"""Tests for twin.py's weights contract (docs/WEIGHTS.md): ONNX and TorchScript backends, using dummy modules
+exported to a temp dir. Never writes into weights/."""
 from __future__ import annotations
 
 import json
 import math
 import sys
 import time
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -60,13 +62,13 @@ class DoyProbe(nn.Module):
 
 
 class NaNAfterWarmup(nn.Module):
-    """Finite while the input looks like the warm-up state (u10 == 2), NaN on real data."""
+    """Finite while the input looks like the warm-up state (u10 == 2), NaN on real data.
+    Branch-free (torch.where) so the same module exports to ONNX."""
 
     def forward(self, states: torch.Tensor, doy_sincos: torch.Tensor) -> torch.Tensor:
         last = states[-1]
-        if bool((last[2] == 2.0).all()):
-            return last.clone()
-        return last * float("nan")
+        warm = (last[2] == 2.0).all()
+        return torch.where(warm, last, last * float("nan"))
 
 
 class AlwaysNaN(nn.Module):
@@ -115,7 +117,9 @@ class ConvNet(nn.Module):
 
 def _save(tmp_path: Path, module: nn.Module, name: str = "model.pt") -> Path:
     p = tmp_path / name
-    torch.jit.script(module.eval()).save(str(p))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)   # torch.jit deprecation on Python 3.14+
+        torch.jit.script(module.eval()).save(str(p))
     return p
 
 
@@ -149,7 +153,7 @@ def test_wrong_shape_module_is_persistence(tmp_path):
 
 def test_dummy_model_shape_name_determinism(tmp_path):
     t = Twin(weights_path=_save(tmp_path, Diffuse()))
-    assert t.backend == "model" and t.model_name == "dummy-diffuse"
+    assert t.backend == "torchscript" and t.model_name == "dummy-diffuse"
     x, d = _init(), doy_sincos(200)
     a = t.rollout(x, d, steps=10)
     b = t.rollout(x, d, steps=10)
@@ -184,7 +188,7 @@ def test_doy_advances_one_day_per_step(tmp_path):
 
 def test_nan_module_falls_back_to_persistence(tmp_path, caplog):
     t = Twin(weights_path=_save(tmp_path, NaNAfterWarmup()))
-    assert t.backend == "model"
+    assert t.backend == "torchscript"
     x = _init()
     out = t.rollout(x, doy_sincos(200), steps=4)
     assert np.array_equal(out, np.repeat(x[-1][None], 4, axis=0))
@@ -200,7 +204,7 @@ def test_realistic_convnet_latency(tmp_path):
     net = ConvNet()
     nparams = sum(p.numel() for p in net.parameters())
     t = Twin(weights_path=_save(tmp_path, net))
-    assert t.backend == "model"
+    assert t.backend == "torchscript"
     x, d = _init(), doy_sincos(200)
     times = []
     for _ in range(3):
@@ -212,3 +216,166 @@ def test_realistic_convnet_latency(tmp_path):
     print(f"\n[latency] ConvNet {nparams / 1e6:.2f}M params, 10-step rollout, {torch.get_num_threads()} threads: "
           f"median {ms:.1f} ms")
     assert ms < 5000
+
+
+# ---------------------------------------------------------------------------------------------
+# ONNX backend (weights/model.onnx, onnxruntime). Same dummies, same one-day step contract.
+# ---------------------------------------------------------------------------------------------
+_EX = (torch.from_numpy(_init().astype(np.float32)), torch.tensor([0.0, 1.0]))
+
+
+class Batched(nn.Module):
+    """Wraps a step model with a leading batch dim of 1: [1,3,6,32,36], [1,2] -> [1,6,32,36]."""
+
+    def __init__(self, inner: nn.Module):
+        super().__init__()
+        self.inner = inner
+
+    def forward(self, states: torch.Tensor, doy_sincos: torch.Tensor) -> torch.Tensor:
+        return self.inner(states[0], doy_sincos[0])[None]
+
+
+def _save_onnx(tmp_path: Path, module: nn.Module, name: str = "model.onnx", batched: bool = False) -> Path:
+    pytest.importorskip("onnxruntime")
+    pytest.importorskip("onnxscript")       # torch.onnx.export (dynamo) needs onnx + onnxscript (dev only)
+    p = tmp_path / name
+    ex = (_EX[0][None], _EX[1][None]) if batched else _EX
+    m = Batched(module) if batched else module
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        torch.onnx.export(m.eval(), ex, str(p), input_names=["states", "doy_sincos"],
+                          output_names=["next_state"], opset_version=18, external_data=False,
+                          do_constant_folding=True, verbose=False)
+    assert not (tmp_path / (name + ".data")).exists()   # single self-contained file
+    return p
+
+
+def test_onnx_loads_shape_determinism(tmp_path):
+    t = Twin(weights_path=_save_onnx(tmp_path, Diffuse()))
+    assert t.backend == "onnx" and t.model_name == "onnx:model.onnx" and t.load_error is None
+    x, d = _init(), doy_sincos(200)
+    a = t.rollout(x, d, steps=10)
+    b = t.rollout(x, d, steps=10)
+    z = t.rollout(x, d, steps=10, perturbation=np.zeros(STATE_SHAPE))
+    assert a.shape == (10, *STATE_SHAPE) and np.all(np.isfinite(a))
+    assert np.array_equal(a, b) and np.array_equal(a, z)
+    assert not np.array_equal(a[0], x[-1])
+    p = np.zeros(STATE_SHAPE)
+    p[CH["t2m"], 10:15, 20:25] = 3.0
+    diff = np.abs(t.rollout(x, d, steps=10, perturbation=p) - a)[0, CH["t2m"]]
+    assert diff.max() > 1.0 and diff[:5].max() < 1e-4
+
+
+def test_onnx_batched_variant_and_meta_name(tmp_path):
+    t = Twin(weights_path=_save_onnx(tmp_path, Diffuse(), batched=True))
+    assert t.backend == "onnx"
+    ref = Twin(weights_path=_save_onnx(tmp_path, Diffuse(), name="ref.onnx"))
+    x, d = _init(), doy_sincos(200)
+    assert np.array_equal(t.rollout(x, d, steps=5), ref.rollout(x, d, steps=5))
+    (tmp_path / "model_meta.json").write_text(json.dumps({"model_name": "aether-unet-v1"}))
+    assert Twin(weights_path=tmp_path / "model.onnx").model_name == "aether-unet-v1"
+
+
+def test_onnx_doy_advances_one_day_per_step(tmp_path):
+    t = Twin(weights_path=_save_onnx(tmp_path, DoyProbe()))
+    assert t.backend == "onnx"
+    doy = 360
+    out = t.rollout(_init(), doy_sincos(doy), steps=8)
+    for k in range(1, 9):
+        ang = out[k - 1, CH["u10"], 0, 0]
+        want = 2 * math.pi * (doy + k) / 365.0
+        assert math.isclose(math.sin(ang), math.sin(want), abs_tol=1e-5)
+        assert math.isclose(math.cos(ang), math.cos(want), abs_tol=1e-5)
+
+
+@pytest.mark.parametrize("net", [Diffuse, ConvNet])
+def test_onnx_matches_torchscript(tmp_path, net):
+    torch.manual_seed(0)
+    m = net()
+    if net is ConvNet:   # non-trivial output head so the comparison exercises the whole net
+        nn.init.normal_(m.out.weight, std=1e-3)
+    to = Twin(weights_path=_save_onnx(tmp_path, m))
+    ts = Twin(weights_path=_save(tmp_path, m))
+    assert (to.backend, ts.backend) == ("onnx", "torchscript")
+    x, d = _init(), doy_sincos(200)
+    a, b = to.rollout(x, d, steps=10), ts.rollout(x, d, steps=10)
+    err = np.abs(a - b) / np.array(STD)[None, :, None, None]       # in units of channel std
+    print(f"\n[onnx-vs-ts] {net.__name__}: day-1 max {err[0].max():.2e} std, 10-day max {err.max():.2e} std")
+    assert np.allclose(a[0], b[0], rtol=1e-6, atol=1e-6)  # one step: a few float32 ulps (1 ulp of msl ~ 1e-5 std)
+    assert np.allclose(a, b, rtol=1e-5, atol=1e-5)  # whole rollout: relative 1e-5 (float32 ulp at 300 K ~ 3e-5)
+
+
+def test_onnx_nan_falls_back_to_persistence(tmp_path, caplog):
+    t = Twin(weights_path=_save_onnx(tmp_path, NaNAfterWarmup()))
+    assert t.backend == "onnx"
+    x = _init()
+    out = t.rollout(x, doy_sincos(200), steps=4)
+    assert np.array_equal(out, np.repeat(x[-1][None], 4, axis=0))
+    assert t.nonfinite_fallbacks == 1 and "persistence fallback" in caplog.text
+    assert Twin(weights_path=_save_onnx(tmp_path, AlwaysNaN(), name="nan.onnx")).backend == "persistence"
+
+
+def test_onnx_wrong_shape_is_persistence(tmp_path):
+    t = Twin(weights_path=_save_onnx(tmp_path, WrongShape()))
+    assert t.backend == "persistence" and "NaN" in t.load_error and "expected" in t.load_error
+
+
+def test_onnx_missing_garbage_lfs_is_persistence(tmp_path):
+    assert Twin(weights_path=tmp_path / "model.onnx").backend == "persistence"
+    assert Twin(weights_path=tmp_path).backend == "persistence"          # empty weights dir
+    p = tmp_path / "model.onnx"
+    p.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 123\n")
+    t = Twin(weights_path=tmp_path)
+    assert t.backend == "persistence" and "LFS" in t.load_error
+    p.write_bytes(b"not an onnx file")
+    t = Twin(weights_path=tmp_path)
+    assert t.backend == "persistence" and t.load_error
+
+
+def test_dir_prefers_onnx_then_env_override(tmp_path, monkeypatch, caplog):
+    _save_onnx(tmp_path, Diffuse())
+    _save(tmp_path, DoyProbe())                     # different model so we can tell which one ran
+    monkeypatch.delenv("TWIN_BACKEND", raising=False)
+    caplog.set_level("INFO", logger="twin")
+    t = Twin(weights_path=tmp_path)
+    assert t.backend == "onnx" and t.loaded_path.name == "model.onnx"
+    assert "preferring model.onnx" in caplog.text
+    monkeypatch.setenv("TWIN_BACKEND", "torchscript")
+    assert Twin(weights_path=tmp_path).backend == "torchscript"
+    monkeypatch.setenv("TWIN_BACKEND", "persistence")
+    assert Twin(weights_path=tmp_path).backend == "persistence"
+    monkeypatch.setenv("TWIN_BACKEND", "onnx")
+    assert Twin(weights_path=tmp_path).backend == "onnx"
+
+
+def test_broken_onnx_falls_through_to_torchscript(tmp_path, monkeypatch):
+    monkeypatch.delenv("TWIN_BACKEND", raising=False)
+    (tmp_path / "model.onnx").write_bytes(b"corrupt")
+    _save(tmp_path, Diffuse())
+    t = Twin(weights_path=tmp_path)
+    assert t.backend == "torchscript" and "model.onnx" in t.load_error
+
+
+def _median_ms(t: Twin, n: int = 5) -> float:
+    x, d = _init(), doy_sincos(200)
+    times = []
+    for _ in range(n):
+        t0 = time.perf_counter()
+        t.rollout(x, d, steps=10)
+        times.append((time.perf_counter() - t0) * 1000)
+    return sorted(times)[n // 2]
+
+
+def test_realistic_convnet_latency_onnx_vs_torchscript(tmp_path):
+    net = ConvNet()
+    nparams = sum(p.numel() for p in net.parameters())
+    to = Twin(weights_path=_save_onnx(tmp_path, net))
+    ts = Twin(weights_path=_save(tmp_path, net))
+    assert (to.backend, ts.backend) == ("onnx", "torchscript")
+    x, d = _init(), doy_sincos(200)
+    assert np.array_equal(to.rollout(x, d, steps=10), to.rollout(x, d, steps=10))
+    ms_o, ms_t = _median_ms(to), _median_ms(ts)
+    size_mb = (tmp_path / "model.onnx").stat().st_size / 1e6
+    print(f"\n[latency] ConvNet {nparams / 1e6:.2f}M params ({size_mb:.1f} MB onnx), 10-step rollout, 4 threads: "
+          f"onnx median {ms_o:.1f} ms, torchscript median {ms_t:.1f} ms")
+    assert ms_o < 5000 and ms_t < 5000

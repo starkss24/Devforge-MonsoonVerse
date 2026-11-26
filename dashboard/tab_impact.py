@@ -16,9 +16,9 @@ from impact.crop_stress import DEFAULT_WEIGHTS, crop_stress
 from impact.regions import REGIONS, region_boxes
 from tab_shocklab import shock_box
 
-UP, DOWN, FLAT = "#dc3c3d", "#257de0", "#9aa3ab"       # more stress / less stress / no change
-REGION_LINE = "#3b2a7a"
-SHOCK_LINE = "#f47230"
+UP, DOWN, FLAT = "#B2182B", "#2166AC", "#9AA6B0"       # more / less stress / no change (ends of the RdBu scale)
+REGION_LINE = plots.INK
+SHOCK_LINE = plots.TURMERIC                             # the shock box is the one turmeric mark
 NO_BAR = {"displayModeBar": False}
 MAP_H = 410
 REGION_HELP = "Approximate boxes, not district boundaries: " + "; ".join(
@@ -90,9 +90,9 @@ def headline(res: dict, shocked_run: bool) -> tuple[str, bool]:
                 "rain threshold it had not already crossed, so the index does not move. Try the hot-day slider.",
                 False)
     b, s = r["baseline"], r["shocked"]
-    return (f"Largest change: **{name}** index {b['index']:.0f} → {s['index']:.0f} (**{ch['index']:+.1f}**) · "
-            f"rain deficit {_pct(b['deficit_pct'], b['clim_dry'])} → {_pct(s['deficit_pct'], s['clim_dry'])} · "
-            f"hot days {b['hot_days']} → {s['hot_days']}", True)
+    return (f"Largest change: **{name}** index {b['index']:.0f} → {s['index']:.0f} (**{ch['index']:+.1f}**); "
+            f"rain deficit {_pct(b['deficit_pct'], b['clim_dry'])} → {_pct(s['deficit_pct'], s['clim_dry'])}, "
+            f"hot days {b['hot_days']} → {s['hot_days']}.", True)
 
 
 def _rect(box, color, dash, width) -> dict:
@@ -107,15 +107,15 @@ def region_map(arc, field2d, title: str, units: str, sbox=None) -> go.Figure:
                           height=MAP_H, coast=land_sea_mask(arc), colorbar="bottom")
     if sbox is not None:
         fig.add_shape(_rect(sbox, SHOCK_LINE, "solid", 2.5))
-        fig.add_annotation(x=sbox[2] - 0.5, y=sbox[0] - 0.5, xref="x", yref="y", text="shock", showarrow=False,
-                           xanchor="left", yanchor="top", font=dict(size=11, color=SHOCK_LINE))
+        fig.add_annotation(x=sbox[2] - 0.5, y=sbox[0] - 0.5, xref="x", yref="y", text="shock box", showarrow=False,
+                           xanchor="left", yanchor="top", font=dict(size=13, color=plots.INK))
     for name, r in REGIONS.items():
         box = r["box"]
         fig.add_shape(_rect(box, REGION_LINE, "dash", 2.0))
         fig.add_annotation(x=(box[2] + box[3]) / 2, y=(box[0] + box[1]) / 2, xref="x", yref="y",
                            text=r["short"].replace(" ", "<br>"), showarrow=False,
-                           font=dict(size=10, color=REGION_LINE),
-                           bgcolor="rgba(255,255,255,0.75)", borderpad=1)
+                           font=dict(size=13, color=REGION_LINE),
+                           bgcolor="rgba(255,255,255,0.8)", borderpad=1)
     return fig
 
 
@@ -128,22 +128,22 @@ def delta_bars(res: dict) -> go.Figure:
                            hovertemplate="%{y}: Δ index %{x:+.1f}<extra></extra>"))
     lim = max(float(np.abs(d).max()) * 1.35, 5.0)
     fig.update_layout(title=dict(text="Δ crop-stress index (shocked − baseline)", x=0.0, xanchor="left",
-                                 font=dict(size=15)),
+                                 font=dict(size=16)),
                       height=230, margin=dict(l=8, r=16, t=30, b=24), font=dict(size=13),
-                      plot_bgcolor="rgba(0,0,0,0)", showlegend=False)
-    fig.update_xaxes(range=[-lim, lim], zeroline=True, zerolinecolor="#555", zerolinewidth=1.5,
-                     gridcolor="rgba(128,128,128,0.25)", title_text="red = more stress, blue = less")
+                      plot_bgcolor="#ffffff", paper_bgcolor="#ffffff", showlegend=False)
+    fig.update_xaxes(range=[-lim, lim], zeroline=True, zerolinecolor=plots.MUTED, zerolinewidth=1.5,
+                     gridcolor="rgba(27,42,65,0.10)", title_text="red = more stress, blue = less")
     fig.update_yaxes(autorange="reversed")
     if not np.any(np.abs(d) > 0.05):
         fig.add_annotation(x=1.0, y=1.0, xref="paper", yref="paper", xanchor="right", yanchor="top", showarrow=False,
                            text="no change in any region",
-                           font=dict(size=13, color="#333"), bgcolor="rgba(255,255,255,0.9)",
-                           bordercolor="rgba(0,0,0,0.25)", borderwidth=1, borderpad=5)
+                           font=dict(size=13, color=plots.INK), bgcolor="rgba(255,255,255,0.9)",
+                           bordercolor=plots.HAIRLINE, borderwidth=1, borderpad=5)
     return fig
 
 
 def render(ctx) -> None:
-    st.subheader("Impact · crop stress by farming region")
+    st.subheader("Impact: crop stress by farming region")
     run = ctx.run
     if run is None:
         st.info("Press **Run the twin** in the sidebar (for example with *monsoon_stall*). This tab then turns the "
@@ -170,7 +170,7 @@ def render(ctx) -> None:
     sbox = shock_box(run.shock_label, run.perturbation) if shocked_run else None
     fig = region_map(ctx.archive, rain_anom, f"{'Shocked' if shocked_run else 'Baseline'} {run.base.shape[0]}-day "
                      "rain vs normal", "mm over the horizon (brown = drier)", sbox)
-    left.plotly_chart(fig, key="impact_map", config=NO_BAR)
+    left.plotly_chart(fig, key="impact_map", config=NO_BAR, theme=None)
 
     with right:
         st.dataframe(table_rows(res), hide_index=True, width="stretch",
@@ -184,7 +184,8 @@ def render(ctx) -> None:
                                                                     help="Change in the 10-day mean t2m anomaly"),
                          "Δ index": st.column_config.NumberColumn(format="%+.1f", width="small"),
                      })
-        st.plotly_chart(delta_bars(res), key="impact_bars", config=NO_BAR)
+        st.plotly_chart(delta_bars(res), key="impact_bars", config=NO_BAR, theme=None)
+
 
     backend = str((ctx.health or {}).get("backend", ""))
     stub = "persist" in backend.lower()

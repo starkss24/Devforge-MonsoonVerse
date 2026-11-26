@@ -21,12 +21,12 @@ import plots
 from common import BOXES, CHANNELS
 from windows import get_window
 
-COLORS = ["#257de0", "#f47230", "#00b894", "#f2a600", "#ee7fac", "#008a17"]   # fixed categorical order
+COLORS = list(plots.CATEGORICAL)                                             # fixed categorical order, no yellow
 CHANNEL_COLORS = {ch: COLORS[i] for i, ch in enumerate(CHANNELS)}            # same colour per channel everywhere
-REGION_COLORS = {"inside": "#f47230", "near": "#f2a600", "outside": "#257de0"}
-DAY_COLORS = {1: "#9ec5f4", 4: "#4a90e2", 8: "#0b3d91"}                       # one hue, light -> dark with time
+REGION_COLORS = {"inside": "#D55E00", "near": "#6B5B95", "outside": "#0072B2"}
+DAY_COLORS = {1: "#9CC3E0", 4: "#4F8DBF", 8: "#1B3F66"}                       # one hue, light -> dark with time
 DAY_LINES = {1: dict(width=7), 4: dict(width=4, dash="dash"), 8: dict(width=2)}  # identical curves stay visible
-GOOD, BAD = "#008a17", "#dc3c3d"
+GOOD, BAD = plots.PADDY, plots.SIGNAL                                        # pass / fail only
 CHART_H = 380
 MAP_H = 340
 DAYS = np.arange(1, 11)
@@ -43,15 +43,16 @@ def style_chart(fig: go.Figure, title: str, xt: str = "", yt: str = "", height: 
                 legend: bool = True) -> go.Figure:
     """Projector style: 14px text, title at the top, legend in one row BELOW the plot (never over the title)."""
     fig.update_layout(
-        title=dict(text=title, x=0.0, xanchor="left", y=0.97, yanchor="top", font=dict(size=17)),
+        title=dict(text=title, x=0.0, xanchor="left", y=0.97, yanchor="top", font=dict(size=16)),
         height=height, font=dict(size=14), margin=dict(l=10, r=16, t=48, b=10),
         xaxis_title=xt, yaxis_title=yt, hovermode="x unified", showlegend=legend,
         legend=dict(orientation="h", yanchor="top", y=-0.2, x=0.0, xanchor="left", font=dict(size=14),
                     title_text=""),
-        plot_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
     )
-    fig.update_xaxes(showgrid=False, title_font=dict(size=14), tickfont=dict(size=13))
-    fig.update_yaxes(gridcolor="rgba(128,128,128,0.25)", title_font=dict(size=14), tickfont=dict(size=13))
+    fig.update_xaxes(showgrid=False, showline=True, linecolor=plots.HAIRLINE, title_font=dict(size=14),
+                     tickfont=dict(size=13))
+    fig.update_yaxes(gridcolor="rgba(27,42,65,0.10)", title_font=dict(size=14), tickfont=dict(size=13))
     return fig
 
 
@@ -95,7 +96,7 @@ def verdict(chk: dict, is_persistence: bool) -> str:
     spread = f"Spreads outward by day 4–8: {_mark(chk['propagates'])}"
     if not chk["propagates"] and is_persistence:
         spread += " (persistence stub does not move)"
-    return f"{loc} · {spread}"
+    return f"{loc}. {spread}"
 
 
 def checks_rows(chk: dict) -> list[dict]:
@@ -142,7 +143,7 @@ def _zero_shock_check(ctx, win) -> None:
 
 # ---------------------------------------------------------------- render
 def render(ctx) -> None:
-    st.subheader("Shock Lab · where does the shock's effect go?")
+    st.subheader("Shock Lab: where does the shock's effect go?")
     run = ctx.run
     has_shock = run is not None and run.perturbation is not None and np.any(run.perturbation != 0)
     if run is None:
@@ -163,12 +164,13 @@ def _render_zero_check(ctx, run) -> None:
     left, right = st.columns([1, 2], vertical_alignment="center")
     with left:
         st.markdown("#### Zero-shock check")
-        clicked = st.button("▶ Run zero-shock check", key="zero_shock_button", type="primary", width="stretch")
+        clicked = st.button("Run zero-shock check", key="zero_shock_button", type="primary", width="stretch")
     right.caption("Two fresh live calls on the same window: no perturbation vs. a perturbation of all zeros. "
                   "A well-behaved twin returns identical forecasts (max |difference| exactly 0).")
     if clicked:
         if ctx.health is None:
-            st.error("The twin server is not reachable, so the check cannot run.")
+            st.error("The twin server is not reachable, so the check cannot run. Start it with "
+                     "`python serve.py --port 8000` and press the button again.")
         else:
             try:
                 win = run.window if run is not None else get_window(ctx.archive, ctx.controls.last_day)
@@ -179,12 +181,12 @@ def _render_zero_check(ctx, run) -> None:
     zc = st.session_state.get("zero_check")
     if zc:
         ok = zc["max_abs"] == 0.0
-        msg = (f"window ending {zc['window']}: max |difference| = {zc['max_abs']:.3g} "
+        msg = (f"window ending {zc['window']}, max |difference| = {zc['max_abs']:.3g} "
                f"({zc['seconds']:.2f} s for both calls)")
         if ok:
-            st.success(f"**✓ PASS** · identical forecasts · {msg}")
+            st.success(f"**✓ Pass: identical forecasts.** {msg[0].upper() + msg[1:]}")
         else:
-            st.error(f"**✗ FAIL** · forecasts differ · {msg}")
+            st.error(f"**✗ Fail: the forecasts differ.** {msg[0].upper() + msg[1:]}")
 
 
 def _render_analysis(ctx, run) -> None:
@@ -208,7 +210,7 @@ def _render_analysis(ctx, run) -> None:
     n_pass = sum(bool(chk[k]) for k in ("nonzero", "localized", "propagates", "no_teleport", "stable"))
     line = verdict(chk, is_persist)
     (st.success if chk["localized"] and chk["propagates"] else st.warning)(
-        f"**{line}**  \n{n_pass} of 5 kit checks pass · shock **{run.shock_label}**, window ending {run.last_day}")
+        f"**{line}**  \n{n_pass} of 5 kit checks pass for shock **{run.shock_label}**, window ending {run.last_day}.")
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Day-1 energy near the box", f"{100 * M.near_frac_day1(e, mask):.0f}%")
@@ -225,7 +227,7 @@ def _render_analysis(ctx, run) -> None:
                                  marker=dict(size=11 if key == "near" else 8)))
     fig = style_chart(fig, "Response energy by region", "lead day", "energy (std² summed)")
     fig.update_xaxes(dtick=1)
-    left.plotly_chart(fig, key="shocklab_energy", config=NO_BAR)
+    left.plotly_chart(fig, key="shocklab_energy", config=NO_BAR, theme=None)
 
     fig = go.Figure()
     for day in (1, 4, 8):
@@ -237,7 +239,7 @@ def _render_analysis(ctx, run) -> None:
                       "% of that day's energy")
     fig.update_xaxes(dtick=1)
     fig.update_layout(hovermode="x")
-    right.plotly_chart(fig, key="shocklab_radial", config=NO_BAR)
+    right.plotly_chart(fig, key="shocklab_radial", config=NO_BAR, theme=None)
 
     _render_energy_maps(ctx, e, box)
 
@@ -257,8 +259,9 @@ def _render_energy_maps(ctx, e: np.ndarray, box) -> None:
     zmax = max(float(e[[k - 1 for k in days]].max()), 1e-12)
     cols = st.columns(2, gap="medium")
     for col, k in zip(cols, days):
-        fig = map_fig(plots.field_map, e[k - 1], lats, lons, f"Response energy · day {k}", "std²",
-                      cmap="YlOrRd", zmin=0.0, zmax=zmax, box=box, height=MAP_H + 40, coast=coast)
-        col.plotly_chart(fig, key=f"shocklab_emap_{k}", config=NO_BAR)
-    st.caption("Where the response is (dashed box = shocked area, same colour scale for both days). "
+        fig = map_fig(plots.field_map, e[k - 1], lats, lons, f"Response energy on day {k}", "std²",
+                      cmap="Reds", zmin=0.0, zmax=zmax, box=box, height=MAP_H + 40, coast=coast)
+        col.plotly_chart(fig, key=f"shocklab_emap_{k}", config=NO_BAR, theme=None)
+    st.caption("Where the response is. The gold box is the shocked area; both days share one colour scale. "
                "A model that moves weather would show the colour drifting away from the box by day 8.")
+

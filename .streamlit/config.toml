@@ -6,9 +6,34 @@ showErrorDetails = true
 [browser]
 gatherUsageStats = false
 
+# Synoptic chart desk: cool rain-mist page, cloud-ink sidebar, monsoon-blue actions.
+# Turmeric (#D9A21B) is reserved for the shock box and the selected day, so it is not a theme colour.
+# One type family, Archivo (variable width + weight). The comma inside the Google Fonts URL is written %2C because
+# this option is itself a comma-separated list; offline, the browser falls back to the system sans.
 [theme]
 base = "light"
-primaryColor = "#0b6e99"      # one accent: monsoon blue
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f2f6f9"
-textColor = "#1a2a33"
+primaryColor = "#2F6F9F"
+backgroundColor = "#EEF3F6"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1B2A41"
+borderColor = "#C3CED6"
+linkColor = "#2F6F9F"
+greenColor = "#3E7D4F"
+redColor = "#B3261E"
+blueColor = "#2F6F9F"
+yellowColor = "#9C5B1A"       # warnings in burnt sienna, so no alert competes with turmeric
+
+font = "Archivo:https://fonts.googleapis.com/css2?family=Archivo:wdth%2Cwght@62..125%2C100..900&display=swap, 'Segoe UI', system-ui, sans-serif"
+headingFontWeights = [700, 650, 650, 600, 600, 600]
+headingFontSizes = ["2.1rem", "1.6rem", "1.3rem", "1.1rem", "1rem", "0.9rem"]
+baseRadius = "small"
+showWidgetBorder = true
+dataframeHeaderBackgroundColor = "#E3EAEF"
+
+[theme.sidebar]
+backgroundColor = "#1B2A41"
+secondaryBackgroundColor = "#24364F"
+textColor = "#E9EFF4"
+primaryColor = "#2F6F9F"
+borderColor = "#3F5572"
+linkColor = "#A9CBE6"

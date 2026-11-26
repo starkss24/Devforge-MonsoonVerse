@@ -1,0 +1,1 @@
+india_outline.geojson: Natural Earth 1:50m coastline (public domain, naturalearthdata.com), clipped to lon 64–102 °E, lat 5–39 °N and simplified to 0.04°. Coastlines only, no land borders. Used by dashboard/plots.py for map outlines; if the file is missing the maps fall back to the grid land-sea mask contour.

@@ -82,7 +82,8 @@ def test_extras_tabs_live(server):
     assert not at.exception, at.exception
     zc = at.session_state["zero_check"]
     assert zc["max_abs"] == 0.0
-    assert any("PASS" in str(s.value) for s in at.success)
+    assert any("Pass: identical forecasts" in str(s.value) for s in at.success)
+
 
     at.button(key="ens_run_button").click().run()
     assert not at.exception, at.exception
