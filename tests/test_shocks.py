@@ -33,6 +33,13 @@ from twin import Twin  # noqa: E402
 STD = np.array([13.46, 7.55, 2.90, 2.43, 619.0, 20.5])   # roughly the kit's stats.json
 
 
+@pytest.fixture(autouse=True)
+def _persistence_backend(monkeypatch):
+    """These tests check the shock-test harness against the persistence stub (exact expected points).
+    Pin Twin() to persistence so they stay valid once real weights are committed in weights/."""
+    monkeypatch.setenv("TWIN_BACKEND", "persistence")
+
+
 @pytest.fixture(scope="module")
 def window():
     init, doy = synthetic_window(seed=0)

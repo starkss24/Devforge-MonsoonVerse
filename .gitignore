@@ -10,3 +10,4 @@ eval/*.csv
 eval/*.json
 /*.pdf
 .claude/settings.local.json
+export/

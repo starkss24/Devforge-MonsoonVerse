@@ -1,0 +1,13 @@
+{
+ "model_name": "aether-unet-e5b",
+ "source_checkpoint": "runs/e5b_gradmag/best_post.pt",
+ "trained_on": "india_climate_train.nc 2005-2018 (train), 2019-2021 held out",
+ "recipe": "residual U-Net, 1-step then multi-step (2,4,8) fine-tune, gradient-magnitude anti-blur loss 0.3",
+ "doy_convention": "export takes doy of the predicted day (WEIGHTS.md); net trained on last-input-day doy, wrapper shifts by -1 day",
+ "post_processing": "post.npz: climatology blend per lead + rain quantile map per lead, applied by root twin.py via postproc.py to the finished rollout",
+ "kit_eval": {
+  "2019-2021_100win": 65.8,
+  "2023_4win": 55.3,
+  "judge_sim_http": 61.0
+ }
+}
