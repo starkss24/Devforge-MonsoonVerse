@@ -1,0 +1,17 @@
+run,change,day1_ratio,day4_ratio,day8_ratio,sharpness,heavy_rain_hit,zero_shock_ok,notes
+e1_onestep,"E1 residual U-Net, 1-step MSE, ST-ReLU rain",0.7641,0.8402,0.9176,0.9562,0.2400,True,india_climate_train.nc
+e4_multistep,"E4 multi-step fine-tune k=2,4,8 from e1 best",0.7599,0.7781,0.8165,0.9300,0.1998,True,india_climate_train.nc
+e5_grad03,"E5 = E4 + grad_weight 0.3 (match mode); STOPPED after ep10 (k=4)",0.7530,0.7830,0.8430,0.9430,0.2300,True,"no effect: matched E4 to 3 decimals every epoch; match-mode grad loss rewards hedging"
+e5b_gradmag,E5b = E4 + gradient-MAGNITUDE anti-blur loss (w=0.3),0.7601,0.7785,0.8183,0.9326,0.2220,True,india_climate_train.nc
+e5c_gradmag1,E5c = E5b with grad-magnitude weight 1.0,0.7607,0.7791,0.8210,0.9357,0.2493,True,india_climate_train.nc
+e3_noise,E3 one-step with input noise 0.05,0.7346,0.8468,0.9366,0.9820,0.2834,True,india_climate_train.nc
+e3c_noise_multi,E3c = E3 noise + E5c multistep recipe,0.7486,0.7922,0.8423,0.9679,0.2950,True,india_climate_train.nc
+e3c_kit,"E3c official kit_eval",,,,,,True,"REJECTED: kit 52.3 raw / 63.1 with post vs e5b_post 68.1; noise hurt skill vs climatology"
+e7_wide48,"E7 wider U-Net base=48, one-step",0.7187,0.8361,0.9163,0.9817,0.2625,True,india_climate_train.nc
+e7b_wide48_multi,E7b = wide48 + E5b multistep recipe,0.7326,0.7789,0.8256,0.9517,0.2851,True,india_climate_train.nc
+e7_kit,"E7b wide48 official kit_eval",,,,,,True,"REJECTED: kit 57.9 raw / 64.3 with post vs e5b_post 68.1; internal score (vs persistence only) misranked it"
+e8_kitsel,"E8 one-step, kit-aligned checkpoint selection",0.7419,0.8712,0.9884,0.9840,0.3082,True,india_climate_train.nc | select=kit | kit_sel=-18.21 kit_ss=-0.0040 kit_csi_skill=+0.0615 kit_blur=10.00
+e8b_kitsel_multi,E8b = E5b recipe with kit-aligned selection,0.7543,0.7978,0.8471,0.9053,0.2611,True,india_climate_train.nc | select=kit | kit_sel=-34.27 kit_ss=+0.0773 kit_csi_skill=+0.0331 kit_blur=9.99
+e9_seed1,E9 seed check: E1 recipe seed=1 (old selection),0.7374,0.8477,0.9284,0.9838,0.3031,True,india_climate_train.nc | select=old | kit_sel=-11.66 kit_ss=-0.0028 kit_csi_skill=+0.0157 kit_blur=10.00
+e9b_seed1_multi,"E9b seed check: E5b recipe seed=1, kit selection",0.7523,0.8010,0.8455,0.9201,0.2671,True,india_climate_train.nc | select=kit | kit_sel=-29.15 kit_ss=+0.0713 kit_csi_skill=+0.0111 kit_blur=9.65
+post_strength_test,"rain calibration strength B25/B50/B75/C50/C75 on e5b_post",,,,,,True,"REJECTED: 2023 kit totals A=55.31 B25=52.09 B50=52.86 B75=54.14 C50=54.90 C75=54.48; RMSE gain < CSI loss; keep full strength"
