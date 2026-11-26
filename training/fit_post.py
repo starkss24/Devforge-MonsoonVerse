@@ -147,6 +147,7 @@ def main():
     ap.add_argument("--blend-cap", type=float, default=1.0, help="upper clip for blend weights")
     ap.add_argument("--blend-channels", default=",".join(CHANNELS), help="channels the blend may touch")
     ap.add_argument("--blend-min-lead", type=int, default=1, help="leads < this get a = 0")
+    ap.add_argument("--fit-end", type=int, default=2018, help="last fitting year (2021 for an all-years model)")
     a = ap.parse_args()
     if a.no_blend and a.no_qmap:
         ap.error("nothing to fit (--no-blend and --no-qmap)")
@@ -155,17 +156,17 @@ def main():
     ck = load_checkpoint(a.ckpt)
     states, dates, _static, _names = load_nc(a.data)
     years = dates.astype("datetime64[Y]").astype(int) + 1970
-    tr = (years >= 2005) & (years <= 2018)
+    tr = (years >= 2005) & (years <= a.fit_end)
     ymd = np.array([int(str(d).replace("-", "")) for d in dates[tr].astype("datetime64[D]")])
     clim = climatology(states[tr], ymd).astype(np.float32)  # kit default (15-day smoothing), [366,6,H,W]
     w = lat_w(states.shape[-2])[:, None]
 
     need = N_IN + STEPS
-    st_tr = window_starts(dates, years, 2005, 2018, need)
+    st_tr = window_starts(dates, years, 2005, a.fit_end, need)
     st_va = window_starts(dates, years, 2019, 2021, need)
     pick = lambda s, n: s[np.unique(np.linspace(0, len(s) - 1, min(n, len(s))).round().astype(int))]
     st_tr, st_va = pick(st_tr, a.windows), pick(st_va, a.val_windows)
-    print(f"fit windows {len(st_tr)} (2005-2018), report windows {len(st_va)} (2019-2021)")
+    print(f"fit windows {len(st_tr)} (2005-{a.fit_end}), report windows {len(st_va)} (2019-2021)")
 
     pred, doys = model_rollouts(ck, states, dates, st_tr)
     truth = states[st_tr[:, None] + N_IN + np.arange(STEPS)[None]].astype(np.float32)
@@ -194,10 +195,10 @@ def main():
                          f"/{np.interp(0.999, quantile_levels(a.q), fq[k]):.0f}->{np.interp(0.999, quantile_levels(a.q), oq[k]):.0f}"
                          for k in range(STEPS)))
 
-    meta = {"fit_years": "2005-2018", "fit_windows": int(len(st_tr)), "q": int(a.q), "blend_cap": float(a.blend_cap),
+    meta = {"fit_years": f"2005-{a.fit_end}", "fit_windows": int(len(st_tr)), "q": int(a.q), "blend_cap": float(a.blend_cap),
             "blend_channels": a.blend_channels, "blend_min_lead": int(a.blend_min_lead),
             "order": "blend then rain qmap", "source_ckpt": str(a.ckpt),
-            "clim": "monsoon_r1.stats.climatology(2005-2018, smooth_days=15)"}
+            "clim": f"monsoon_r1.stats.climatology(2005-{a.fit_end}, smooth_days=15)"}
     post = Post(blend=blend, clim=clim if blend is not None else None, qmap_fq=fq, qmap_oq=oq, meta=meta)
 
     print("training-year subsample:")

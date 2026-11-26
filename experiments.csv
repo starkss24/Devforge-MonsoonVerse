@@ -15,3 +15,5 @@ e8b_kitsel_multi,E8b = E5b recipe with kit-aligned selection,0.7543,0.7978,0.847
 e9_seed1,E9 seed check: E1 recipe seed=1 (old selection),0.7374,0.8477,0.9284,0.9838,0.3031,True,india_climate_train.nc | select=old | kit_sel=-11.66 kit_ss=-0.0028 kit_csi_skill=+0.0157 kit_blur=10.00
 e9b_seed1_multi,"E9b seed check: E5b recipe seed=1, kit selection",0.7523,0.8010,0.8455,0.9201,0.2671,True,india_climate_train.nc | select=kit | kit_sel=-29.15 kit_ss=+0.0713 kit_csi_skill=+0.0111 kit_blur=9.65
 post_strength_test,"rain calibration strength B25/B50/B75/C50/C75 on e5b_post",,,,,,True,"REJECTED: 2023 kit totals A=55.31 B25=52.09 B50=52.86 B75=54.14 C50=54.90 C75=54.48; RMSE gain < CSI loss; keep full strength"
+f1_all_onestep,"F1 all-years 2005-2021 one-step, fixed 8 epochs (use last.pt)",0.7451,0.8309,0.9662,1.0175,0.2642,True,india_climate_train.nc | select=kit | kit_sel=-19.91 kit_ss=+0.0129 kit_csi_skill=+0.0446 kit_blur=10.00
+f1b_all_multi,"F1b all-years multistep 2,4,8 x5, grad-mag 0.3 (use last.pt)",0.7525,0.7354,0.7800,0.9291,0.2775,True,india_climate_train.nc | select=kit | kit_sel=-46.10 kit_ss=+0.1374 kit_csi_skill=+0.0442 kit_blur=9.46

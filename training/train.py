@@ -172,6 +172,8 @@ def main(argv=None):
     ap.add_argument("--resume", default=None)
     ap.add_argument("--run-name", default=None)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--train-end", type=int, default=2018,
+                    help="last training year (default 2018 keeps 2019-2021 held out; 2021 = final all-years model)")
     ap.add_argument("--base", type=int, default=32)
     ap.add_argument("--depth", type=int, default=3)
     ap.add_argument("--amp", action="store_true")
@@ -199,9 +201,12 @@ def main(argv=None):
         print(f"[train] synthetic data T={len(dates)} {dates[0]}..{dates[-1]}")
     else:
         states, dates, static, names = load_nc(a.data, tp_scale=a.tp_scale)
-    tr_idx, va_idx = year_split(dates)
+    tr_idx, va_idx = year_split(dates, train=(2005, a.train_end))
     assert len(tr_idx) and len(va_idx), "empty train/val split"
-    print(f"[train] train days={len(tr_idx)} val days={len(va_idx)} (year split 2005-2018 / 2019-2021)")
+    print(f"[train] train days={len(tr_idx)} val days={len(va_idx)} (train 2005-{a.train_end} / val 2019-2021)")
+    if a.train_end >= 2019:
+        print("[train] WARNING: validation years are inside the training set; validation scores are NOT "
+              "held-out, so use a fixed epoch schedule (last.pt) and judge the model on post-2023 data")
 
     # ---- model + normalizer
     if a.resume:

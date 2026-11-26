@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from .model import UNet, rollout_std
+from .model import EnsembleUNet, UNet, rollout_std
 from .norm import CHANNELS, N_IN, RAIN, Normalizer, from_model, to_model
 from .post import Post
 
@@ -35,7 +35,7 @@ def save_checkpoint(path, model: UNet, config: dict | None, norm: Normalizer, st
     ``static`` (physical, [2,H,W]) is stored as a float32 torch tensor so the file
     loads with ``torch.load(weights_only=True)``.
     """
-    cfg = dict(model.config())
+    cfg = dict(model.config())  # an EnsembleUNet adds "members": n
     if config:
         cfg.update({k: config[k] for k in CONFIG_KEYS if k in config})
     static_t = torch.as_tensor(np.asarray(static, dtype=np.float32)).clone()
@@ -66,7 +66,8 @@ def load_checkpoint(path, device="cpu") -> dict:
     except Exception:  # older files / meta with non-allowlisted types; our own weights
         ckpt = torch.load(path, map_location="cpu", weights_only=False)
     cfg = {k: ckpt["config"][k] for k in CONFIG_KEYS if k in ckpt["config"]}
-    model = UNet(**cfg)
+    n_members = int(ckpt["config"].get("members", 0))
+    model = EnsembleUNet([UNet(**cfg) for _ in range(n_members)]) if n_members else UNet(**cfg)
     model.load_state_dict(ckpt["model_state"])
     model.to(device).eval()
     static = ckpt["static"]

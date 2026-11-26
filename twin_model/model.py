@@ -91,6 +91,30 @@ class UNet(nn.Module):
         return out
 
 
+class EnsembleUNet(nn.Module):
+    """Averages the raw normalized deltas of several same-config UNets (one forward per member).
+
+    Used through ``step`` like a single UNet: next = last + mean(raw_i) * delta_std, then the rain floor.
+    Members must share the normalizer and static maps (checked when the ensemble is built).
+    """
+
+    def __init__(self, members: list[UNet]):
+        super().__init__()
+        if not members:
+            raise ValueError("EnsembleUNet needs at least one member")
+        cfgs = [m.config() for m in members]
+        if any(c != cfgs[0] for c in cfgs):
+            raise ValueError(f"EnsembleUNet members must share one config, got {cfgs}")
+        self.members = nn.ModuleList(members)
+        self.softplus_beta = members[0].softplus_beta
+
+    def config(self) -> dict:
+        return {**self.members[0].config(), "members": len(self.members)}
+
+    def forward(self, x):
+        return torch.stack([m(x) for m in self.members], dim=0).mean(dim=0)
+
+
 def build_input(window_std, static_std, doy_sincos):
     """[B,3,6,H,W], [B,2,H,W], [B,2] -> [B,22,H,W] (oldest day first, static, sin, cos)."""
     B, T, C, Hh, Ww = window_std.shape
