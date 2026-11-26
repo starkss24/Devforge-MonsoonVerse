@@ -1,0 +1,50 @@
+diff --git a/scripts/repo_scan_lite.py b/scripts/repo_scan_lite.py
+index b753f48..e5d7166 100644
+--- a/scripts/repo_scan_lite.py
++++ b/scripts/repo_scan_lite.py
+@@ -4,7 +4,7 @@ import ast, os, subprocess, sys, sys as _s
+ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ ALLOWED = {"torch", "numpy", "scipy", "pandas", "xarray", "sklearn", "lightgbm",
+            "onnxruntime", "fastapi", "flask", "uvicorn", "gunicorn"}  # R1_CONTRACT.md list
+-LOCAL = {"common", "twin", "serve"}
++LOCAL = {"common", "twin", "serve", "twin_model"}
+ CHECKED = ["serve.py", "common.py", "twin.py"]
+ MAX = 50 * 1024 * 1024
+ 
+diff --git a/twin.py b/twin.py
+index 8519f35..4a3d1b6 100644
+--- a/twin.py
++++ b/twin.py
+@@ -26,6 +26,7 @@ from typing import Callable, Optional
+ import numpy as np
+ 
+ from common import CH, INIT_SHAPE, N_THREADS, STATE_SHAPE, T2M_MAX_K, T2M_MIN_K, TP_MIN, enforce_validity
++from twin_model import post_numpy
+ 
+ log = logging.getLogger("twin")
+ WEIGHTS_DIR = Path(__file__).resolve().parent / "weights"
+@@ -66,6 +67,15 @@ class Twin:
+         self._lock = threading.Lock()
+         if self.weights_path is not None:
+             self._load()
++        self.post = None
++        if self.model is not None and wdir is not None and (wdir / "post.npz").is_file():
++            try:
++                _check_not_lfs_pointer(wdir / "post.npz")
++                self.post = post_numpy.load(wdir / "post.npz")
++                log.info("post-processing loaded from %s", wdir / "post.npz")
++            except Exception as e:  # noqa: BLE001 - keep serving the raw model, loudly
++                self.post = None
++                log.error("post.npz not loaded (%s: %s); serving raw model output", type(e).__name__, e)
+ 
+     # ---- loading -----------------------------------------------------------
+     def _candidates(self) -> list[tuple[str, Path]]:
+@@ -219,6 +229,8 @@ class Twin:
+         if self.model is not None:
+             out = self._model_rollout(x, d, steps)
+             if np.all(np.isfinite(out)):
++                if self.post is not None:
++                    out = post_numpy.apply(out, d, self.post)  # d = doy of the LAST INPUT day
+                 return enforce_validity(out)
+             # never return NaN/Inf: count, log loudly, fall through to persistence
+             self.nonfinite_fallbacks += 1
