@@ -1,13 +1,16 @@
 {
- "model_name": "aether-unet-e5b",
- "source_checkpoint": "runs/e5b_gradmag/best_post.pt",
+ "model_name": "aether-unet-v2-ens2",
+ "source_checkpoint": "runs/ens2_e5b_e9b/pv/cap05_slope15.pt",
+ "members": ["runs/e5b_gradmag/best.pt (seed 0)", "runs/e9b_seed1_multi/best.pt (seed 1)"],
  "trained_on": "india_climate_train.nc 2005-2018 (train), 2019-2021 held out",
- "recipe": "residual U-Net, 1-step then multi-step (2,4,8) fine-tune, gradient-magnitude anti-blur loss 0.3",
+ "recipe": "2-member ensemble (daily change averaged per step) of residual U-Nets: 1-step then multi-step (2,4,8) fine-tune, gradient-magnitude anti-blur loss 0.3",
  "doy_convention": "export takes doy of the predicted day (WEIGHTS.md); net trained on last-input-day doy, wrapper shifts by -1 day",
- "post_processing": "post.npz: climatology blend per lead + rain quantile map per lead, applied by root twin.py via postproc.py to the finished rollout",
+ "post_processing": "post.npz fitted on 2005-2018: climatology blend per lead (capped at 0.5) + rain quantile map per lead (segment slope capped at 1.5); applied by root twin.py via postproc.py to the finished rollout",
  "kit_eval": {
-  "2019-2021_100win": 65.8,
-  "2023_4win": 55.3,
-  "judge_sim_http": 61.0
- }
+  "val100_2019_2021": 67.06,
+  "real_2023_4win": 59.11,
+  "real_2023_2025_12win": 60.26,
+  "previous_model_aether_unet_e5b": {"val100_2019_2021": 65.78, "real_2023_4win": 55.31, "real_2023_2025_12win": 58.40}
+ },
+ "latency_ms_10_steps_onnx_4_threads": 50
 }

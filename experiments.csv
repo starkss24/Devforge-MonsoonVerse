@@ -17,3 +17,10 @@ e9b_seed1_multi,"E9b seed check: E5b recipe seed=1, kit selection",0.7523,0.8010
 post_strength_test,"rain calibration strength B25/B50/B75/C50/C75 on e5b_post",,,,,,True,"REJECTED: 2023 kit totals A=55.31 B25=52.09 B50=52.86 B75=54.14 C50=54.90 C75=54.48; RMSE gain < CSI loss; keep full strength"
 f1_all_onestep,"F1 all-years 2005-2021 one-step, fixed 8 epochs (use last.pt)",0.7451,0.8309,0.9662,1.0175,0.2642,True,india_climate_train.nc | select=kit | kit_sel=-19.91 kit_ss=+0.0129 kit_csi_skill=+0.0446 kit_blur=10.00
 f1b_all_multi,"F1b all-years multistep 2,4,8 x5, grad-mag 0.3 (use last.pt)",0.7525,0.7354,0.7800,0.9291,0.2775,True,india_climate_train.nc | select=kit | kit_sel=-46.10 kit_ss=+0.1374 kit_csi_skill=+0.0442 kit_blur=9.46
+v2_ens2,"2-seed ensemble e5b+e9b, post refit 2005-2018",,,,,,True,"kit 100val 68.06; real12 57.05 (< e5b 58.40): held-out gain does not transfer to real 2023-25 alone"
+v2_ens2_slope15,"ens2 + rain-map slope cap 1.5",,,,,,True,"kit 100val 67.06; real12 59.40; painted-shock peaks 6-11 std -> 3.3, stable all windows"
+v2_ens2_cap05_slope15,"ens2 + blend cap 0.5 + slope cap 1.5",,,,,,True,"CANDIDATE: kit 100val 67.06; real2023(4) 59.11; real12 60.26; shock fade 8/13 -> 3/14 windows"
+v2_ens2_cap05,"ens2 + blend cap 0.5",,,,,,True,"kit 100val 68.06; real12 57.92; does not fix stability"
+v2_e5b_cap05_slope15,"e5b + blend cap 0.5 + slope cap 1.5",,,,,,True,"real2023(4) 56.89; real12 60.95; CSI 4.8 on 2023 (vs ens 9.6); 100val pending"
+v2_f1b_all_years,"all-years 2005-2021 retrain (fixed schedule) + post fit 2005-2021",,,,,,True,"REJECTED: real2023(4) 46.38, real12 52.94 (vs e5b 55.31/58.40); with cap05_slope15 49.80/56.90"
+v2_monsoon_stall,"post variants vs monsoon_stall propagation",,,,,,True,"NOT FIXABLE IN POST: raw model propagates ~5/12 windows (growth 1.14 < 1.5); all post variants ~3/14; needs retrain (beyond 06:30 cut-off)"

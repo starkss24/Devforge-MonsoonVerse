@@ -77,11 +77,13 @@ def score(path, wins, clim, std):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("ckpts", nargs="*"); ap.add_argument("--fetch", default="")
+    ap.add_argument("--only", default="", help="use only windows whose file name starts with this (e.g. 2023)")
     a = ap.parse_args()
     for d in [s for s in a.fetch.split(",") if s]:
         if not (DIR / f"{dt.date.fromisoformat(d):%Y%m%d}.npz").exists():
             fetch(dt.date.fromisoformat(d))
-    wins = windows(); print(f"{len(wins)} real windows: {', '.join(str(w[0]) for w in wins)}")
+    wins = [w for w in windows() if f"{w[0]:%Y%m%d}".startswith(a.only)]
+    print(f"{len(wins)} real windows: {', '.join(str(w[0]) for w in wins)}")
     if not a.ckpts:
         return
     states, dates, _, _ = load_nc("data/india_climate_train.nc")

@@ -98,6 +98,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("ckpt"); ap.add_argument("--out", default="export")
     ap.add_argument("--name", default="aether-unet-e5b"); ap.add_argument("--data", default="data/india_climate_train.nc")
+    ap.add_argument("--scores", default="", help='JSON of measured scores for model_meta.json, e.g. \'{"val100": 67.06}\'')
     a = ap.parse_args()
     torch.set_num_threads(4)
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
@@ -178,7 +179,7 @@ def main():
         "recipe": "residual U-Net, 1-step then multi-step (2,4,8) fine-tune, gradient-magnitude anti-blur loss 0.3",
         "doy_convention": "export takes doy of the predicted day (WEIGHTS.md); net trained on last-input-day doy, wrapper shifts by -1 day",
         "post_processing": "post.npz: climatology blend per lead + rain quantile map per lead, applied by root twin.py via postproc.py to the finished rollout",
-        "kit_eval": {"2019-2021_100win": 65.8, "2023_4win": 55.3, "judge_sim_http": 61.0},
+        "kit_eval": json.loads(a.scores) if a.scores else None,
     }, indent=1))
     for f in sorted(out.iterdir()):
         print(f"    {f.name:16s} {f.stat().st_size / 1e6:6.2f} MB")
