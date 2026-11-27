@@ -256,6 +256,11 @@ def test_app_live_mode_runs_without_the_button(live_server):
     assert main_map["layout"]["sliders"][0]["active"] == 3                       # day 1
     assert [b["label"] for b in main_map["layout"]["updatemenus"][0]["buttons"]] == ["Play", "Pause", "Slow", "Fast"]
     assert "day 4" in main_map["frames"][6]["layout"]["title"]["text"]
+    # Step through walks map, panel and strip through every day together and ends on the last day
+    at.button(key="step_button").click().run()
+    assert not at.exception and at.select_slider(key="lead_day").value == 10
+    assert any("Day 10" in m.value for m in at.markdown)                       # the panel followed
+    at.select_slider(key="lead_day").set_value(1).run()
     # place forecast: a city switch re-charts without a server call
     at.selectbox(key="probe_place").set_value("Delhi").run()
     assert not at.exception and at.session_state["run"] is run

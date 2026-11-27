@@ -71,6 +71,8 @@ section[data-testid="stSidebar"] :focus-visible { outline-color: #A9CBE6 !import
 .mm-title { font-size: 1.75rem; font-weight: 720; font-stretch: 125%; letter-spacing: -0.005em;
             color: var(--ink); line-height: 1.1; }
 .mm-head .mm-pill { margin-left: auto; }
+.mm-title { white-space: nowrap; }
+.mm-head .mm-pill-detail { display: none; }   /* details live in the sidebar status */
 .mm-sub { font-size: 0.98rem; color: var(--muted); margin: 0.1rem 0 0 0; }
 .mm-pill { font-size: 0.9rem; font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center;
            gap: 0.4rem; }
