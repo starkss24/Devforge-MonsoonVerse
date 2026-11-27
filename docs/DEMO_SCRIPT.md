@@ -4,12 +4,13 @@ Follows the playbook's 7 steps. The labels below are copied from the dashboard c
 
 ## Before the judges arrive (not timed)
 
-1. Start the server: `python serve.py --port 8000`. The log must say `backend=model`.
-2. Start the dashboard: `streamlit run dashboard/app.py`. Open it at 1280 × 720 or larger.
-3. Check the header pill reads **● Server ready · <model name>**. The sidebar status line must say `backend model`, not `persistence`.
-4. Sidebar, **Window: last input day**: leave it on **2019-07-15** (the default, a monsoon day).
-5. Do one warm-up **▶ Run the twin** so the first live call is not the one the judges see.
-6. Keep the backup screen recording open in another window. Record it from this script with the final model loaded; it does not exist yet.
+1. Start the server: `python serve.py --port 8000`. The log must say `backend=onnx`, and `/health` must report `model_name: aether-unet-v21-ens4` and `post: loaded`.
+2. Once per machine, generate the Model card's scores with the final weights (local file, not in git; about a minute): `python -m eval.score --data data/india_climate_train.nc --stats data/stats.json --twin`.
+3. Start the dashboard: `streamlit run dashboard/app.py`. Open it at 1280 × 720 or larger. The first load can take 10–20 s on a busy laptop; the map area shows "Drawing the map…" meanwhile.
+4. Check the header pill reads **● Server ready · aether-unet-v21-ens4** with onnx and post-processing on. The sidebar status line must say `backend onnx`, not `persistence`.
+5. Sidebar, **Window: last input day**: leave it on **2019-07-15** (the default, a monsoon day).
+6. Do one warm-up **▶ Run the twin** so the first live call is not the one the judges see.
+7. Keep the backup screen recording open in another window. Record it from this script with the final model (`aether-unet-v21-ens4`) loaded.
 
 **Fallback for the whole demo.** If the pill shows **● Server down**, restart `python serve.py --port 8000`. If the URL is wrong, open sidebar **Settings → Twin server URL** and use `http://127.0.0.1:8000` (not `localhost`, which adds about 2 s per call on Windows). If it still fails within 30 s, play the backup recording and talk over it.
 

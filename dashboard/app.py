@@ -115,6 +115,13 @@ ol.mm-guide li::before { content: counter(step); display: inline-block; width: 1
 section[data-testid="stSidebar"] .mm-pill-detail { color: #C9D5DF; }
 .mm-chip { margin-left: 0.6rem; font-size: 0.85rem; font-weight: 600; color: var(--blue); padding: 0.1rem 0.55rem;
            border: 1px solid var(--blue); border-radius: 3px; background: #fff; white-space: nowrap; }
+/* Big map while it is being computed / painted: a calm message instead of a blank white box on the projector.
+   The backdrop sits behind the Plotly figure, whose opaque white paper covers it once the map has painted. */
+.mm-painting { height: 500px; display: flex; align-items: center; justify-content: center; background: var(--mist);
+               color: var(--muted); border: 1px solid var(--hair); border-radius: 6px; font-size: 1.05rem; }
+.st-key-maps_main { background: var(--mist) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='40'><text x='160' y='26' text-anchor='middle' font-family='Archivo, sans-serif' font-size='17' fill='%234F5D6B'>Drawing the map…</text></svg>") center 45% / 320px 40px no-repeat;
+                    border-radius: 6px; min-height: 500px; }
+.mm-panel-note { font-size: 0.85rem; color: var(--muted); margin: 0.1rem 0 0.6rem 0; line-height: 1.35; }
 /* Maps tab control panel */
 .mm-dayhead { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 0.7rem; row-gap: 0.1rem;
               color: var(--ink); margin: 0.2rem 0 0.9rem 0; }

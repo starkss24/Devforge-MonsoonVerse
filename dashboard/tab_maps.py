@@ -45,6 +45,11 @@ def wants_run(controls, run, health, live: bool) -> bool:
 
 
 MAP_HEIGHT = 500       # px; the big map incl. Play / speed / day slider, visible without scrolling at 1280x720
+# The animation runs in the browser, so Streamlit cannot follow the playing frame: say which day each part shows.
+PANEL_NOTE_HTML = ("<p class='mm-panel-note'>This panel shows the <b>selected day</b>. Play animates the map in your "
+                   "browser: the map's title and its info box follow the playing day. Pick a day with the timeline, "
+                   "Earlier / Later, or a day-strip frame to update this panel.</p>")
+PAINTING_HTML = "<div class='mm-painting'>Drawing the map…</div>"
 PANEL_HEIGHT = 304     # px; each of the side-by-side maps
 STRIP_HEIGHT = 170     # px; six maps in one row (days 1, 2, 4, 6, 8, 10)
 STRIP_DAYS = (1, 2, 4, 6, 8, 10)
@@ -370,6 +375,7 @@ def render(ctx) -> None:
         head_ph = st.empty()
         st.select_slider("Timeline", days, key="lead_day", format_func=timeline_label, label_visibility="collapsed")
         _day_buttons(st)
+        st.markdown(PANEL_NOTE_HTML, unsafe_allow_html=True)
         st.segmented_control("Show", VIEWS, key="map_view", required=True, label_visibility="collapsed",
                              format_func=lambda v: VIEW_TEXT[v])
         st.segmented_control("Map clicks", [CLICK_MOVE, CLICK_PROBE], key="click_mode", required=True,
@@ -387,6 +393,8 @@ def render(ctx) -> None:
     if is_stale(c, run):
         st.warning(f"The sidebar changed. The map still shows the last run (window ending {run.last_day}, shock "
                    f"{run.shock_label}, {steps} days). Press Run to update it, or turn on Live.")
+    # shown while the frames are built and sent (the CSS backdrop covers the browser's paint time after that)
+    map_ph.markdown(PAINTING_HTML, unsafe_allow_html=True)
 
     arc = ctx.archive
     lats, lons = np.asarray(arc.lats), np.asarray(arc.lons)
