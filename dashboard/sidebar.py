@@ -77,13 +77,20 @@ def default_server_url() -> str:
     return os.environ.get(SERVER_ENV, "").strip() or client.DEFAULT_URL
 
 
-def status_pill(health, error: str | None = None) -> str:
-    """Small HTML status line: green dot 'Server ready, running <model>' or red dot 'Server down'."""
+def status_pill(health, error: str | None = None, rt_ms: float | None = None) -> str:
+    """Small HTML status line from /health: green dot 'Server ready, running <model>' with backend, whether
+    post-processing is loaded and the last round trip; or red dot 'Server down'."""
     if health is not None:
         name = html.escape(str(health.get("model_name", "?")))
         backend = html.escape(str(health.get("backend", "?")))
-        return (f'<span class="mm-pill mm-ok" title="backend: {backend}"><span class="mm-dot"></span>'
-                f'Server ready, running {name}</span>')
+        post = str(health.get("post", ""))
+        bits = [backend] + (["post-processing on"] if post == "loaded" else [])
+        if rt_ms is not None and np.isfinite(rt_ms) and rt_ms > 0:
+            bits.append(f"{rt_ms:.0f} ms")
+        detail = html.escape(", ".join(bits))
+        return (f'<span class="mm-pill mm-ok" title="backend: {backend}, post-processing: {html.escape(post)}">'
+                f'<span class="mm-dot"></span>Server ready, running {name}'
+                f'<span class="mm-pill-detail">({detail})</span></span>')
     tip = html.escape(error or "not reachable")
     return f'<span class="mm-pill mm-down" title="{tip}"><span class="mm-dot"></span>Server down</span>'
 
@@ -196,6 +203,9 @@ def render_sidebar(arc, status_slot=None, display=None) -> Controls:
     settings = sb.expander("Settings", expanded=False)
 
     server_url = settings.text_input("Twin server URL", value=default_server_url(), key="server_url")
+    settings.toggle("Reduce motion", key="reduce_motion",
+                    help="The map plays at the slow pace (1.4 s per day) whichever speed is pressed. For viewers who "
+                         "prefer less motion.")
 
     valid = valid_last_days(arc)
     vmin, vmax = valid.min().astype(dt.date), valid.max().astype(dt.date)
