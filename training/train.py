@@ -24,7 +24,7 @@ from twin_model.norm import CHANNELS, RAIN, Normalizer, from_model, to_model
 from twin_model.twin import load_checkpoint, save_checkpoint
 
 from .dataset import WindowDataset, load_nc, make_synthetic, year_split
-from .losses import rollout_loss
+from .losses import anomaly_amplitude_loss, rollout_loss
 
 VAL_LEADS = (1, 4, 8)          # lead days scored
 VAL_STEPS = max(VAL_LEADS)
@@ -38,6 +38,16 @@ def _d(x) -> dt.date:
     """datetime64 -> datetime.date (same helper as training/kit_eval.py; not imported because kit_eval
     sets CUDA_VISIBLE_DEVICES='' at import time, which would hide the GPU)."""
     return x.astype("datetime64[D]").astype(object)
+
+
+def target_clim_slots(doy_sincos: torch.Tensor, k: int) -> torch.Tensor:
+    """[B,2] sin/cos of the last input day -> [B,k] kit climatology slots of target days 1..k
+    (same calendar as twin_model/post_numpy.target_slots: 1-based doy, Feb 29 = slot 59)."""
+    ang = torch.remainder(torch.atan2(doy_sincos[:, 0], doy_sincos[:, 1]), 2 * math.pi)
+    d0 = torch.remainder(torch.round(ang * 365.0 / (2 * math.pi)).long(), 365)
+    d0 = torch.where(d0 == 0, torch.full_like(d0, 365), d0)
+    doy = torch.remainder(d0[:, None] + torch.arange(1, k + 1, device=d0.device)[None, :] - 1, 365) + 1
+    return torch.where(doy < 60, doy - 1, doy)
 
 
 def train_climatology(states_train, dates_train):
@@ -163,6 +173,7 @@ def main(argv=None):
     ap.add_argument("--lr", type=float, default=None)
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--input-noise", type=float, default=0.0)
+    ap.add_argument("--anom-weight", type=float, default=0.0, help="anomaly-amplitude loss weight (fights regression to the mean)")
     ap.add_argument("--rain-weight", type=float, default=2.0)
     ap.add_argument("--grad-weight", type=float, default=0.1)
     ap.add_argument("--grad-mode", choices=["match", "mag"], default="match",
@@ -226,6 +237,10 @@ def main(argv=None):
     tp_thresh = float(np.percentile(s_tr[:, RAIN], 95))
     print(f"[train] heavy-rain threshold (train p95 tp) = {tp_thresh:.3f} mm/day")
     clim = train_climatology(s_tr, d_tr)  # once, train years only
+    clim_std_t = None
+    if a.anom_weight > 0:  # climatology in standardized model space, for the anomaly-amplitude loss
+        clim_std_t = torch.from_numpy(np.ascontiguousarray(norm.standardize(to_model(clim)), np.float32)).to(device)
+        print(f"[train] anomaly-amplitude loss on, weight {a.anom_weight}")
     val_ds = WindowDataset(s_va, d_va, static, norm, VAL_STEPS)
     assert len(val_ds) > 0, f"no validation windows with {3 + VAL_STEPS} consecutive days"
 
@@ -264,6 +279,9 @@ def main(argv=None):
                     pred = rollout_std(model, win, stat, doy, k, norm)
                 loss = rollout_loss(pred.float(), tgt, rain_weight=a.rain_weight, grad_weight=a.grad_weight,
                                     grad_mode=a.grad_mode)
+                if clim_std_t is not None:
+                    loss = loss + a.anom_weight * anomaly_amplitude_loss(
+                        pred.float(), tgt, clim_std_t[target_clim_slots(doy, k)])
                 opt.zero_grad(set_to_none=True)
                 scaler.scale(loss).backward()
                 scaler.unscale_(opt)
