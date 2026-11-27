@@ -650,7 +650,7 @@ def twin_map_animated(zs, lats, lons, units: str, cmap: str, zmin, zmax, zmid=No
                               dict(label="Fast", method="animate", args=[None, play(350, 200)]),
                           ])],
         sliders=[dict(active=s0, x=0.45, len=0.55, y=-0.035, yanchor="top", pad=dict(t=0, b=0),
-                      currentvalue=dict(visible=False), font=dict(size=12, color=INK), tickcolor=HAIRLINE,
+                      currentvalue=dict(visible=False), font=dict(size=13, color=INK), tickcolor=HAIRLINE,
                       bordercolor=HAIRLINE, activebgcolor=TURMERIC,
                       steps=[dict(label=names[i], method="animate",
                                   args=[[names[i]], dict(mode="immediate", frame=dict(duration=0, redraw=True),
