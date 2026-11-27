@@ -61,10 +61,15 @@ kit schema_validator, repo_scan 15/15, pytest tests/ -q. 09:50-10:15 screenshots
 Bay of Bengal low on rain, map click moving the shock, Play mid-animation, Observed, Shock Lab, Ensemble, Model card,
 Impact), brief PDF with Junaid, rehearsal. Note results and anything not done in docs/STATUS.md.
 
-UPDATE 07:55: v3 is a NO-GO (anti-damping loss spread monsoon_stall 13/20 in the raw network, but only 7/20 after
-post-processing and -3 points on real 2023 windows); weights on main stay aether-unet-v2-ens2. Nothing to verify for
-weights. Please MERGE `feat/aether-v3` anyway (no weights change): README training section, docs/PROJECT_EXPLAINED.md
-(team explainer), updated JUDGE_QA monsoon_stall answer, training code + tests, experiments log.
+UPDATE 08:15: NEW WEIGHTS TO VERIFY on `feat/aether-v3`: **aether-unet-v21-ens4** (same recipe and post as v2, but 4
+seeds averaged instead of 2). It passes the bar with margin: kit_eval 100 held-out 67.66 (>= 67.06), real 2023 63.64
+(>= 59.11), real 12 62.94 (>= 60.26), judge simulation through serve.py 68.1 (v2 64.7), validators PASS, repo_scan_lite
+PASS, gates pass; 100 ms per 10-day rollout in-process (please re-time through serve.py on your machine; my background
+server showed ~0.78 s/call on a busy laptop). Every shock preset stable 20/20; warm_ocean spreads 16/20 (v2 13). Details:
+docs/MODEL_V21.md. Please verify through serve.py and merge before your 09:30 freeze; if anything fails, keep v2.
+(The v3 anti-damping idea itself was a no-go: spreading gained in the raw network was lost after post-processing.)
+The branch also carries: README training section, docs/PROJECT_EXPLAINED.md (team explainer), updated BRIEF/JUDGE_QA
+numbers for v2.1, training code + tests, experiments log.
 
 ALSO MERGE from `feat/aether-v3` even if no new weights land: README now has the "Model and how to train it" section
 (the organisers' checklist needs "README says how to train"); it only touches README.md + docs.

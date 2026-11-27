@@ -1,6 +1,6 @@
 # Judge Q&A: answers anyone on the team can give
 
-Short answers, grounded in our docs and the organisers' contract. Model facts confirmed by Aether against the final model (`aether-unet-v2-ens2`; numbers in `docs/MODEL_V2.md`). Rehearse at hour 19, each person answering about another person's lane.
+Short answers, grounded in our docs and the organisers' contract. Model facts confirmed by Aether against the final model (`aether-unet-v21-ens4`, 4-member ensemble; numbers in `docs/MODEL_V21.md`, earlier models in `docs/MODEL_V2.md`). Rehearse at hour 19, each person answering about another person's lane.
 
 ## The five must-answer questions
 
@@ -40,7 +40,7 @@ We split by year: train 2005–2018, validate 2019–2021. We never split by ran
 It shows how sensitive the forecast is to small errors in the starting state. The dashboard adds tiny noise (default 0.5% of channel std) to the 3 start days and makes 8 live calls. The server itself stays deterministic. It is not a calibrated probability, and the model card says so.
 
 **How fast is it on CPU?**
-A 10-step rollout on the persistence backend takes about 100 ms. The final model (two 2 M-parameter U-Nets, onnx) takes about 50 ms on 4 threads, about 0.1 s per call including JSON. The judge's limit is 5 s on 4 cores. Measured through `serve.py` on our Windows laptop: about 80 ms per 10-day rollout on the server, 0.16 s per call including JSON and HTTP, `/health` ready in 4-7 s. The model loads and warms up before `/health` says ready, so no scored call pays the start-up cost.
+A 10-step rollout on the persistence backend takes about 100 ms. The final model (four 2 M-parameter U-Nets, onnx) takes about 100 ms for 10 days on 4 threads (the 2-member version: about 50 ms, measured through `serve.py` at about 80 ms per rollout and 0.16 s per call). The judge's limit is 5 s on 4 cores. `/health` is ready in 2-7 s. The model loads and warms up before `/health` says ready, so no scored call pays the start-up cost.
 
 **Why predict the change rather than the full next day?**
 Day-to-day changes are small next to the fields themselves, so predicting the change is an easier learning problem. It also makes the model start from persistence, which is the strong baseline at day 1. Each change is normalised per channel by the spread of its own day-to-day changes, so rain and pressure count equally (rain then gets double weight in the loss, because heavy rain is scored separately).
@@ -49,7 +49,7 @@ Day-to-day changes are small next to the fields themselves, so predicting the ch
 `eval/score.py` imports the organisers' own metric code: lat-weighted RMSE skill, heavy-rain CSI at 10 mm/day, the validity gate and the anti-blur ratio. `eval/shock_test.py` uses the kit's own shocks and causality checks. We score many validation windows, not just 5, so the numbers are stable.
 
 **Why two models averaged (an ensemble)?**
-Two networks trained the same way but from different random starts make partly independent errors; averaging their predicted change each day cancels some of them. It raised our validation score from 65.8 to 67.1 and the real 2023 score from 55.3 to 59.1, and it costs about 25 ms. It is still deterministic: same input, same output.
+Networks trained the same way but from different random starts make partly independent errors; averaging their predicted change each day cancels some of them. Going from 1 to 2 to 4 networks raised our validation score from 65.8 to 67.1 to 67.7 and the real 2023 score from 55.3 to 59.1 to 63.6; each extra network costs about 25 ms. It is still deterministic: same input, same output.
 
 **Isn't the post-processing a lookup table of past weather?**
 No dates or past weather are stored. It is a one-year climatology (366 average days, which the organisers' repo scan explicitly allows) plus a curve per lead day that maps forecast rain amounts to observed ones, both fitted on 2005–2018 only. It is applied to our own forecast, always the same way, so a zero shock still gives an identical result.

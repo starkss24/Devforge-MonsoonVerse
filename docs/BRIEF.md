@@ -1,12 +1,12 @@
 # Multiverse of Monsoon, Track 2: a learned digital twin of Indian daily weather
 
-*Draft. Model facts and results confirmed by Aether for `aether-unet-v2-ens2` and re-measured through `serve.py` by Vishwak on 2026-11-27 (67.06 of 70 on 100 held-out windows, identical to the model lane). The previous model, `aether-unet-e5b`, scored 65.8 of 70 and 55.3 on 2023 (single U-Net, blend not capped; see `docs/MODEL_V2.md`).*
+*Draft. Model facts and results confirmed by Aether for `aether-unet-v21-ens4` (4-member ensemble; `docs/MODEL_V21.md`). If the team keeps the 2-member `aether-unet-v2-ens2` (re-measured through `serve.py` by Vishwak: 67.06 of 70 on 100 held-out windows, 59.1 on 2023), use its numbers from `docs/MODEL_V2.md`. The first model, `aether-unet-e5b`, scored 65.8 and 55.3.*
 
 ## Page 1: model design, drift and blur, failure modes
 
 **Problem.** From 3 real days of 6 fields (t2m, tp, u10, v10, msl, tcwv) on a 32 × 36, 1° grid over India, roll the weather 10 days forward. Answer "what if" shocks causally: a change starts where it is painted and then spreads.
 
-**Model.** Two small residual U-Nets (2.0 M parameters each, 3 levels, 32→256 channels), trained identically with different seeds; at every step their predicted changes are averaged (`aether-unet-v2-ens2`).
+**Model.** Four small residual U-Nets (2.0 M parameters each, 3 levels, 32→256 channels), trained identically with different random seeds; at every step their predicted changes are averaged (`aether-unet-v21-ens4`, about 100 ms for 10 days on 4 CPU threads).
 - Input: 3 days × 6 channels, the 2 static maps (land-sea mask, orography) and day-of-year as sin/cos, giving 22 input planes.
 - Output: the normalised change to the next day, added to the last input day. Predicting the change makes "no change" the default; the output layer starts at zero, so the untrained model *is* persistence.
 - Rain is modelled in log1p space and floored at exactly 0 (a straight-through ReLU: dry cells stay dry, no drizzle creeping in over 10 days).
@@ -20,7 +20,8 @@
 - *Post-processing, fitted on 2005–2018 and applied to the finished rollout:* a climatology blend whose weight grows with lead time (capped at 0.5, so shocks are never erased), and a per-lead rain quantile map that restores heavy-rain intensity (its stretch capped at 1.5× so painted shocks stay stable). Both are fixed functions of the forecast and the date, so the null shock stays exact. The climatology is one year of 366 days, which the kit's repo scan explicitly allows.
 - *Checkpoint selection by rollout score* (day-4/day-8 skill plus sharpness), never by training loss.
 - *Clamps between steps.* Rain ≥ 0 and t2m within −40 to +60 °C are enforced before each day is fed back.
-- Tried and rejected, with scores in `experiments.csv`: input noise during training (52 vs 61 of 70), a wider U-Net (58), retraining on all years 2005–2021 (worse on real 2023–2025 data).
+- *Ensemble.* Averaging four identically trained networks: errors from different random starts partly cancel (1 → 2 → 4 members: 65.8 → 67.1 → 67.7 on validation, 55.3 → 59.1 → 63.6 on real 2023 windows).
+- Tried and rejected, with scores in `experiments.csv`: input noise during training (52 vs 61 of 70), a wider U-Net (58), retraining on all years 2005–2021 (worse on real 2023–2025 data), an anti-damping loss for wind shocks (spread more in the raw network, lost after post-processing, −3 on 2023).
 
 **Determinism and the null-shock guarantee.** The server runs the model in eval and inference mode, on CPU, with 4 threads and no randomness. A zero perturbation adds exactly 0, so it gives a bit-identical rollout. Our own test demands max |difference| = 0, which is stricter than the judge's 1e-3 std. If the weights fail to load or a step returns NaN/Inf, the twin falls back to persistence, logged and counted in `/health`. The server never crashes or sends invalid numbers.
 
@@ -28,14 +29,14 @@
 
 | Judge component (validation 2019–2021) | Persistence baseline | Our model |
 |---|---|---|
-| RMSE skill vs better reference (30) | 0.00 (mean SS −0.173) | 30.0 (mean SS +0.154) |
-| Heavy-rain CSI skill, > 10 mm/day (15) | 0.00 (mean −0.039) | 14.6 (mean +0.097) |
-| Anti-blur, day-8 variance (10) | 8.33 (tp ratio 2.80 > 2.5) | 10.0 (lowest ratio: rain 0.57) |
-| Shock causality (15) | 11.25 (localised, does not propagate) | 12.9 (mean over 20 windows) |
-| Beats persistence at day 4 | fails by construction | yes, on every channel |
-| Total of 70 automatic points | 19.6 | 67.1 |
+| RMSE skill vs better reference (30) | 0.00 (mean SS −0.173) | 30.0 (mean SS +0.157) |
+| Heavy-rain CSI skill, > 10 mm/day (15) | 0.00 (mean −0.039) | 14.5 (mean +0.097) |
+| Anti-blur, day-8 variance (10) | 8.33 (tp ratio 2.80 > 2.5) | 10.0 |
+| Shock causality (15) | 11.25 (localised, does not propagate) | 13.1 (monsoon_stall rarely spreads) |
+| Beats persistence at day 4 | fails by construction | yes |
+| Total of 70 automatic points | 19.6 | 67.7 |
 
-*Persistence: all 1,084 validation windows (`eval/BASELINE.md`); our model: 100 evenly spaced validation windows, kit scoring code. The better reference is persistence at day 1 and climatology at days 4 and 8. Because the hidden test is after 2023, we also downloaded 12 real windows from 2023–2025 with the organisers' own data pipeline: 60.3 of 70 there (59.1 on the four 2023 windows), so expect the low 60s on unseen dates.*
+*Persistence: all 1,084 validation windows (`eval/BASELINE.md`); our model: 100 evenly spaced validation windows, kit scoring code. The better reference is persistence at day 1 and climatology at days 4 and 8. Because the hidden test is after 2023, we also downloaded 12 real windows from 2023–2025 with the organisers' own data pipeline: 62.9 of 70 there (63.6 on the four 2023 windows), and 68.1 in a full judge simulation through our server, so expect the low-to-mid 60s on unseen dates.*
 
 **Failure modes and honest limits.**
 - **t2m is a daily mean.** Heatwave thresholds written for daily maxima rarely trigger, so we use anomalies against climatology.

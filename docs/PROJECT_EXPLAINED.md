@@ -106,8 +106,8 @@ The network only predicts **one day**. To get 10 days, we feed its own predictio
      grows with lead time, capped at 50%). Late days become more sensible.
    - **Rain quantile map:** the network under-predicts heavy rain; this stretches its rain amounts so their
      distribution matches real rain (stretch capped at 1.5× so painted shocks don't explode).
-5. **Ensemble (66 → 67).** Two networks trained the same way with different random starts; we average their
-   predictions every day. Their errors partly cancel.
+5. **Ensemble (66 → 67 → 67.7).** Four networks trained the same way with different random starts; we average their
+   predictions every day. Their errors partly cancel (on real 2023 data: 1 network 55, 2 networks 59, 4 networks 64).
 
 ### 4.5 What we tried and threw away (good for "what did you try?")
 Adding noise to inputs during training (worse: 52), a wider network (worse: 58), retraining on all years 2005–2021
@@ -116,8 +116,8 @@ data), an "anti-damping" loss to make wind shocks spread (the raw network spread
 of 8/20, but after post-processing only 7/20 vs 5/20, at a cost of about 3 points of skill on real 2023 data; see
 section 8). All in `experiments.csv` with the reason.
 
-### 4.6 The final model: `aether-unet-v2-ens2`
-2 U-Nets (2 M weights each) averaged + post-processing. Exported as `weights/model.onnx` (ONNX = a portable model file
+### 4.6 The final model: `aether-unet-v21-ens4`
+4 U-Nets (2 M weights each) averaged + post-processing, about 100 ms for 10 days on a CPU. Exported as `weights/model.onnx` (ONNX = a portable model file
 that runs fast on CPU without the training code) with a backup `weights/model.pt` (TorchScript) and the
 post-processing numbers in `weights/post.npz`.
 
@@ -127,15 +127,15 @@ post-processing numbers in `weights/post.npz`.
 
 | Test | Score (automatic part, out of 70) |
 |---|---|
-| 100 held-out days from 2019–2021 (never used for training) | **67.1** |
-| 12 real windows from 2023–2025 (same period as the judge's test) | **60.3** |
-| 4 real 2023 windows | 59.1 |
-| Full judge simulation through our server | 64.7 |
+| 100 held-out days from 2019–2021 (never used for training) | **67.7** |
+| 12 real windows from 2023–2025 (same period as the judge's test) | **62.9** |
+| 4 real 2023 windows | 63.6 |
+| Full judge simulation through our server | 68.1 |
 
-**Expect the low 60s from the judge**, because the hidden test is on new dates. Plus repo (we pass the organisers'
+**Expect the low-to-mid 60s from the judge**, because the hidden test is on new dates. Plus repo (we pass the organisers'
 own repo scan with 15/15) and brief.
 
-Skill by forecast day (100 held-out windows, "+" = better than the best simple guess):
+Skill by forecast day (2-network version, 100 held-out windows; the 4-network model is similar or slightly better; "+" = better than the best simple guess):
 
 | Day | Temperature | Rain | Wind E-W | Wind N-S | Pressure | Moisture |
 |---|---|---|---|---|---|---|

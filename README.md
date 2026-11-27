@@ -39,10 +39,10 @@ the impact maths is in [docs/IMPACT.md](docs/IMPACT.md).
 
 ## Model and how to train it
 
-The served model is `aether-unet-v2-ens2`: two residual U-Nets (2 M parameters each, trained identically with seeds 0
-and 1) whose predicted daily change is averaged at every step, plus post-processing fitted on training years
+The served model is `aether-unet-v21-ens4`: four residual U-Nets (2 M parameters each, trained identically with seeds
+0-3) whose predicted daily change is averaged at every step, plus post-processing fitted on training years
 (climatology blend per lead, capped at 0.5; rain quantile map per lead, stretch capped at 1.5×). Design, results,
-shock behaviour and limits: [docs/MODEL_V2.md](docs/MODEL_V2.md); every experiment and why it was kept or rejected:
+shock behaviour and limits: [docs/MODEL_V21.md](docs/MODEL_V21.md) and [docs/MODEL_V2.md](docs/MODEL_V2.md); every experiment and why it was kept or rejected:
 `experiments.csv`, `kit_scores.csv`.
 
 Training needs a GPU for comfort (about 10 minutes per model on an RTX 5070 laptop GPU; CPU works, slowly) and the
@@ -55,17 +55,17 @@ python -m training.train --data data/india_climate_train.nc --stage onestep --ep
 # 2. multi-step fine-tune on 2-, 4-, 8-day rollouts with the gradient-magnitude anti-blur loss (picked by kit score)
 python -m training.train --data data/india_climate_train.nc --stage multistep --k 2,4,8 --epochs 5 \
     --grad-mode mag --grad-weight 0.3 --resume runs/e1_onestep/best.pt --run-name e5b_gradmag
-#    (repeat 1-2 with --seed 1 -> runs/e9b_seed1_multi)
-# 3. ensemble the two seeds, fit post-processing on 2005-2018, apply the caps
-python -m training.make_ensemble runs/e5b_gradmag/best.pt runs/e9b_seed1_multi/best.pt --out runs/ens2_e5b_e9b/best.pt
-python -m training.fit_post runs/ens2_e5b_e9b/best.pt --out runs/ens2_e5b_e9b/best_post.pt
-python -m training.post_variants runs/ens2_e5b_e9b/best_post.pt --out runs/ens2_e5b_e9b/pv     # -> cap05_slope15.pt
+#    (repeat 1-2 with --seed 1, 2, 3 -> runs/e9b_seed1_multi, runs/s2_multi, runs/s3_multi)
+# 3. ensemble the four seeds, fit post-processing on 2005-2018, apply the caps
+python -m training.make_ensemble runs/e5b_gradmag/best.pt runs/e9b_seed1_multi/best.pt runs/s2_multi/best.pt runs/s3_multi/best.pt --out runs/ens4/best.pt
+python -m training.fit_post runs/ens4/best.pt --out runs/ens4/best_post.pt
+python -m training.post_variants runs/ens4/best_post.pt --out runs/ens4/pv     # -> cap05_slope15.pt
 # 4. score (kit scoring code): 100 held-out windows, real post-2023 windows, shock behaviour
-python -m training.kit_eval runs/ens2_e5b_e9b/pv/cap05_slope15.pt --windows 100
-python -m training.eval_real runs/ens2_e5b_e9b/pv/cap05_slope15.pt --fetch 2023-07-20     # downloads real windows
-python -m training.shock_lab runs/ens2_e5b_e9b/pv/cap05_slope15.pt --windows 8 --gallery
+python -m training.kit_eval runs/ens4/pv/cap05_slope15.pt --windows 100
+python -m training.eval_real runs/ens4/pv/cap05_slope15.pt --fetch 2023-07-20     # downloads real windows
+python -m training.shock_lab runs/ens4/pv/cap05_slope15.pt --windows 8 --gallery
 # 5. export for the server (docs/WEIGHTS.md): model.onnx, TorchScript model.pt, post.npz, model_meta.json
-python -m training.export runs/ens2_e5b_e9b/pv/cap05_slope15.pt --out export --name aether-unet-v2-ens2
+python -m training.export runs/ens4/pv/cap05_slope15.pt --out export --name aether-unet-v21-ens4
 ```
 
 Tests for the model lane: `python -m pytest tests/test_norm.py tests/test_model.py tests/test_twin_model.py
