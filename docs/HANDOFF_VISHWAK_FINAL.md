@@ -61,5 +61,10 @@ kit schema_validator, repo_scan 15/15, pytest tests/ -q. 09:50-10:15 screenshots
 Bay of Bengal low on rain, map click moving the shock, Play mid-animation, Observed, Shock Lab, Ensemble, Model card,
 Impact), brief PDF with Junaid, rehearsal. Note results and anything not done in docs/STATUS.md.
 
+UPDATE 07:55: v3 is a NO-GO (anti-damping loss spread monsoon_stall 13/20 in the raw network, but only 7/20 after
+post-processing and -3 points on real 2023 windows); weights on main stay aether-unet-v2-ens2. Nothing to verify for
+weights. Please MERGE `feat/aether-v3` anyway (no weights change): README training section, docs/PROJECT_EXPLAINED.md
+(team explainer), updated JUDGE_QA monsoon_stall answer, training code + tests, experiments log.
+
 ALSO MERGE from `feat/aether-v3` even if no new weights land: README now has the "Model and how to train it" section
 (the organisers' checklist needs "README says how to train"); it only touches README.md + docs.
