@@ -32,7 +32,7 @@ For comparison, "tomorrow = today" (persistence) scores 19.6. The model and how 
 
 **How we checked.** The model lane scored each checkpoint on its training machine; we then re-scored the exported
 weights **through `serve.py`**, the way the judges call it, and got the same numbers (67.66 vs 67.66). Before every
-merge: `tools/validate.py`, the organisers' schema validator, our shock tests, the full test suite (253 tests,
+merge: `tools/validate.py`, the organisers' schema validator, our shock tests, the full test suite (255 tests,
 including tests that start the real server and drive the dashboard) and a **fresh clone from GitHub** into an empty
 folder (install, cold start, validators, repo scan).
 
@@ -209,7 +209,7 @@ tests/test_training.py tests/test_post.py tests/test_ensemble.py -q` (synthetic 
 | `impact/` | Crop-stress index per farming region (rain deficit, hot days), used by the Impact tab |
 | `data_tools/` | Data loader, baselines and the figures in [docs/DATA.md](docs/DATA.md) |
 | `tools/validate.py`, `scripts/` | Pre-submission checks: validator, repo scan, clean-clone test |
-| `tests/` | 253 tests: contract, server, model, training, scoring, shocks, impact, dashboard (live) |
+| `tests/` | 255 tests: contract, server, model, training, scoring, shocks, impact, dashboard (live) |
 | `docs/` | Brief, explainers, model reports, contract, demo script, judge Q&A: see [docs/README.md](docs/README.md) |
 | `experiments.csv`, `kit_scores.csv` | Every training run and score, kept or rejected, with the reason |
 
