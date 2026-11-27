@@ -6,3 +6,6 @@ matplotlib
 # ONNX export (tests/test_twin.py, docs/WEIGHTS.md recipe); not needed by the server
 onnx==1.23.2
 onnxscript==0.7.2
+markdown
+pypdf
+playwright
