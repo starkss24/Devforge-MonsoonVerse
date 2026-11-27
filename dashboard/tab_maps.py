@@ -46,6 +46,11 @@ def wants_run(controls, run, health, live: bool) -> bool:
 
 
 MAP_HEIGHT = 500       # px; the big map incl. Play / speed / day slider, visible without scrolling at 1280x720
+# Play under the map runs in the browser and cannot update the panel; Step all walks everything together.
+PANEL_NOTE_HTML = ("<p class='mm-panel-note'><b>Play</b> under the map previews the animation (the map's title and "
+                   "info box follow it). <b>Step all</b> (key P) moves the map, this panel and the day strip "
+                   "together.</p>")
+PAINTING_HTML = "<div class='mm-painting'>Drawing the map…</div>"
 PANEL_HEIGHT = 304     # px; each of the side-by-side maps
 STRIP_HEIGHT = 170     # px; six maps in one row (days 1, 2, 4, 6, 8, 10)
 STRIP_DAYS = (1, 2, 4, 6, 8, 10)
@@ -381,6 +386,7 @@ def render(ctx) -> None:
         head_ph = st.empty()
         slider_ph = st.empty()     # the timeline; while Step through runs, a progress bar in its place
         _day_buttons(st, run is not None)
+        st.markdown(PANEL_NOTE_HTML, unsafe_allow_html=True)
         st.segmented_control("Show", VIEWS, key="map_view", required=True, label_visibility="collapsed",
                              format_func=lambda v: VIEW_TEXT[v])
         st.segmented_control("Map clicks", [CLICK_MOVE, CLICK_PROBE], key="click_mode", required=True,
@@ -406,6 +412,8 @@ def render(ctx) -> None:
     if is_stale(c, run):
         st.warning(f"The sidebar changed. The map still shows the last run (window ending {run.last_day}, shock "
                    f"{run.shock_label}, {steps} days). Press Run to update it, or turn on Live.")
+    # shown while the frames are built and sent (the CSS backdrop covers the browser's paint time after that)
+    map_ph.markdown(PAINTING_HTML, unsafe_allow_html=True)
     strip_head_ph, strip_ph = st.empty(), st.empty()     # the day strip, right under the map
 
     arc = ctx.archive

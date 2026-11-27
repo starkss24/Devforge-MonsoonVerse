@@ -7,7 +7,10 @@ Follows the playbook's 7 steps. The labels below are copied from the dashboard c
 
 1. Start the server: `python serve.py --port 8000`. The log must say `backend=onnx` and the model name
    (`aether-unet-v21-ens4`).
-2. Start the dashboard: `streamlit run dashboard/app.py`. Open it at 1280 × 720 or larger.
+2. Start the dashboard: `streamlit run dashboard/app.py`. Open it at 1280 × 720 or larger. The first load can take
+   10–20 s on a busy laptop (the map area says "Drawing the map…"). Once per machine, before this step, generate the
+   Model card's scores with the final weights (local file, not in git; about a minute):
+   `python -m eval.score --data data/india_climate_train.nc --stats data/stats.json --twin`.
 3. Check the header reads **● Server ready, running aether-unet-v21-ens4**. The sidebar status line shows the details:
    `onnx, post-processing on` and the last round trip in ms. It must not say `persistence`.
 4. Sidebar, **Window: last input day**: leave it on **2019-07-15** (the default, a monsoon day). **Live: update on

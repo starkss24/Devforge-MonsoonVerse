@@ -271,4 +271,4 @@ streamlit run dashboard/app.py              # terminal 2: the app (needs data/ f
    non-negative rain, temperature limits, the static maps, the day of year, and the post-processing fitted on training
    years. No physics equations.
 
-More answers: `docs/JUDGE_QA.md`. Full model details: `docs/MODEL_V2.md`. Demo steps: `docs/DEMO_SCRIPT.md`.
+More answers: `docs/JUDGE_QA.md`. Full model details: `docs/MODEL_V21.md` (final model) and `docs/MODEL_V2.md` (design, shock gallery, earlier versions). Demo steps: `docs/DEMO_SCRIPT.md`.
