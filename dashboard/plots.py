@@ -362,18 +362,20 @@ def diff_map(diff2d, lats, lons, title: str, units: str, vmax=None, box=None, wi
 
 
 def diff_strip(diffs, lats, lons, units: str, box=None, selected: int = 1, height: int = 150, *,
-               coast=None, hit_stride: int = 3) -> go.Figure:
+               coast=None, hit_stride: int = 3, days=None) -> go.Figure:
     """One row of small difference maps, day 1..n, on one symmetric colour range; the selected day is outlined.
 
     Every panel also holds an invisible grid of points (customdata = day number), so clicking anywhere on a
     panel selects that day when the figure is shown with point selections enabled.
     """
-    d = np.asarray(diffs, dtype=float)
+    d_all = np.asarray(diffs, dtype=float)
+    day_list = [k for k in (days or range(1, d_all.shape[0] + 1)) if 1 <= k <= d_all.shape[0]]
+    d = d_all[[k - 1 for k in day_list]]
     n = d.shape[0]
     lats, lons = np.asarray(lats, float), np.asarray(lons, float)
-    v = 1.0 if symmetric_limit(d, floor=0.0) < ZERO_DIFF else symmetric_limit(d)
-    fig = make_subplots(rows=1, cols=n, horizontal_spacing=0.01,
-                        subplot_titles=[f"Day {k + 1}" for k in range(n)])
+    v = 1.0 if symmetric_limit(d_all, floor=0.0) < ZERO_DIFF else symmetric_limit(d_all)   # scale of ALL days
+    fig = make_subplots(rows=1, cols=n, horizontal_spacing=0.012,
+                        subplot_titles=[f"Day {k}" for k in day_list])
     hy, hx = _half_step(lats), _half_step(lons)
     gx, gy = np.meshgrid(lons[1::hit_stride], lats[1::hit_stride])
     x_range = [float(lons.min()) - hx, float(lons.max()) + hx]
@@ -383,7 +385,7 @@ def diff_strip(diffs, lats, lons, units: str, box=None, selected: int = 1, heigh
         cb = dict(title=dict(text=units, side="right", font=dict(size=13)), thickness=9, len=1.0, x=1.0,
                   xpad=6, tickfont=dict(size=13), nticks=3, outlinewidth=0)
         fig.add_trace(go.Heatmap(z=d[k], x=lons, y=lats, colorscale=DIVERGING, zmin=-v, zmax=v, zmid=0.0,
-                                 showscale=(k == 0), hoverinfo="skip", colorbar=cb, name=f"diff day {k + 1}"),
+                                 showscale=(k == 0), hoverinfo="skip", colorbar=cb, name=f"diff day {day_list[k]}"),
                       row=1, col=col)
         if coast is not None:
             add_coast(fig, coast, lats, lons, width=0.7, row=1, col=col)
@@ -392,10 +394,11 @@ def diff_strip(diffs, lats, lons, units: str, box=None, selected: int = 1, heigh
             sh.update(xref="x" if col == 1 else f"x{col}", yref="y" if col == 1 else f"y{col}",
                       line=dict(color=TURMERIC, width=1.5))
             fig.add_shape(sh)
-        fig.add_trace(go.Scatter(x=gx.ravel(), y=gy.ravel(), mode="markers", name=f"day {k + 1}",
-                                 customdata=np.full(gx.size, k + 1),
-                                 marker=dict(size=14, opacity=0, color=INK),
-                                 hovertemplate=f"Day {k + 1}: show it in the large maps<extra></extra>"),
+        fig.add_trace(go.Scatter(x=gx.ravel(), y=gy.ravel(), mode="markers", name=f"day {day_list[k]}",
+                                 customdata=np.full(gx.size, day_list[k]),
+                                 marker=dict(size=14, opacity=0, color=INK), selected=dict(marker=dict(opacity=0)),
+                                 unselected=dict(marker=dict(opacity=0)),
+                                 hovertemplate=f"Day {day_list[k]}: show it on the map<extra></extra>"),
                       row=1, col=col)
         fig.update_xaxes(range=x_range, showticklabels=False, ticks="", showgrid=False, zeroline=False,
                          showline=True, mirror=True, linecolor=HAIRLINE, linewidth=1, constrain="domain",
@@ -406,9 +409,10 @@ def diff_strip(diffs, lats, lons, units: str, box=None, selected: int = 1, heigh
                          fixedrange=True, row=1, col=col)
     sel = int(selected)
     for k, a in enumerate(fig.layout.annotations):   # subplot titles
-        a.font = dict(size=13, color=INK, weight=700 if k + 1 == sel else 400)
-    if 1 <= sel <= n:
-        dom = fig.layout["xaxis" if sel == 1 else f"xaxis{sel}"].domain
+        a.font = dict(size=14, color=INK, weight=700 if day_list[k] == sel else 400)
+    if sel in day_list:
+        col = day_list.index(sel) + 1
+        dom = fig.layout["xaxis" if col == 1 else f"xaxis{col}"].domain
         fig.add_shape(type="rect", xref="paper", yref="paper", x0=dom[0] - 0.004, x1=dom[1] + 0.004,
                       y0=-0.04, y1=1.2, line=dict(color=TURMERIC, width=3), fillcolor="rgba(0,0,0,0)",
                       name="selected_day")
@@ -530,4 +534,123 @@ def twin_map(field2d, lats, lons, title: str, units: str, cmap: str, zmin=None, 
                      ticktext=["70°E", "75°E", "80°E", "85°E", "90°E", "95°E", "100°E"], tickfont=dict(size=13))
     fig.update_yaxes(title_text=None, scaleratio=LAT_SCALE, tickvals=[10, 15, 20, 25, 30, 35],
                      ticktext=["10°N", "15°N", "20°N", "25°N", "30°N", "35°N"], tickfont=dict(size=13))
+    return fig
+
+
+# ---------------------------------------------------------------- animated main map (frames, played in the browser)
+def nearest_city_labels(lats, lons, cities=None) -> np.ndarray:
+    """[nlat*nlon] strings like "near Kolkata (120 km)" for hover text (static, so the frames stay small)."""
+    c = CITY_LABELS if cities is None else cities
+    names = list(c)
+    pts = np.array([c[n] for n in names], dtype=float)
+    gy, gx = np.meshgrid(np.asarray(lats, float), np.asarray(lons, float), indexing="ij")
+    dy = (gy.ravel()[:, None] - pts[None, :, 0]) * 111.0
+    dx = (gx.ravel()[:, None] - pts[None, :, 1]) * 111.0 * np.cos(np.deg2rad(gy.ravel()[:, None]))
+    d = np.hypot(dx, dy)
+    k = d.argmin(axis=1)
+    return np.array([f"near {names[i]} ({d[n, i]:.0f} km)" for n, i in enumerate(k)])
+
+
+def _wind_xy(wind, lats, lons, stride, ref):
+    if wind is None:
+        return [], []
+    tr = _wind_trace(wind[0], wind[1], lats, lons, stride=stride, ref=ref)
+    return (list(tr.x), list(tr.y)) if tr is not None else ([], [])
+
+
+def twin_map_animated(zs, lats, lons, units: str, cmap: str, zmin, zmax, zmid=None, *, labels, facts=None,
+                      winds=None, rings=None, ring_level: Optional[float] = None, box=None, coast=None,
+                      start: int = 0, frame_names=None, probe=None, click_action: Optional[str] = None,
+                      height: int = 520, wind_stride: int = 3, wind_ref: Optional[float] = 10.0,
+                      reduce_motion: bool = False) -> go.Figure:
+    """The big map as ONE figure with a frame per timeline day, animated in the browser (Plotly Play / Pause /
+    Slow / Fast and a day slider under the map): no server round trip per frame.
+
+    zs: list of [nlat, nlon] fields (display units, NaN = no data); labels: frame titles; facts: per-frame text in a
+    box on the map, so the facts follow the animation; winds: per-frame (u, v) or None; rings: per-frame fields whose
+    |value| >= ring_level is outlined (the shock's spreading front); start: frame shown first.
+    Static layers: coast, cities, turmeric shock box, probe marker. A click grid (customdata [lat, lon, value]) makes
+    clicks selectable; its values follow the frames."""
+    n = len(zs)
+    lats, lons = np.asarray(lats, float), np.asarray(lons, float)
+    names = list(frame_names) if frame_names is not None else [str(i) for i in range(n)]
+    s0 = min(max(int(start), 0), n - 1)
+    fig = twin_map(np.asarray(zs[s0], float), lats, lons, labels[s0], units, cmap, zmin=zmin, zmax=zmax, zmid=zmid,
+                   box=box, wind=None, coast=coast, height=height, note=None)
+    fig.data[0].hoverinfo = "skip"
+    fig.data[0].hovertemplate = None
+    dyn = [0]
+    if winds is not None:
+        wx, wy = _wind_xy(winds[s0], lats, lons, wind_stride, wind_ref)
+        fig.add_trace(go.Scatter(x=wx, y=wy, mode="lines", line=dict(color=WIND_COLOR, width=1.1),
+                                 hoverinfo="skip", name="wind", showlegend=False))
+        dyn.append(len(fig.data) - 1)
+        if wind_ref:
+            _wind_key(fig, lats, lons, wind_stride, float(wind_ref))
+    if rings is not None and ring_level:
+        fig.add_trace(go.Contour(z=np.abs(np.asarray(rings[s0], float)), x=lons, y=lats, showscale=False,
+                                 contours=dict(start=ring_level, end=ring_level, size=1.0, coloring="none"),
+                                 autocontour=False, line=dict(color=INK, width=2.2, smoothing=1.0, dash="dot"),
+                                 hoverinfo="skip", name="front"))
+        dyn.append(len(fig.data) - 1)
+    if probe is not None:
+        fig.add_trace(probe_marker_trace(*probe))
+    gx, gy = np.meshgrid(lons, lats)
+    city_txt = nearest_city_labels(lats, lons)
+
+    def grid_cd(z):
+        return np.stack([gy.ravel(), gx.ravel(), np.nan_to_num(np.asarray(z, float)).ravel()], axis=1)
+
+    hover = ("%{customdata[0]:.1f}°N, %{customdata[1]:.1f}°E, %{text}<br><b>%{customdata[2]:.2f} " + units + "</b>"
+             + (f"<br><i>click: {click_action}</i>" if click_action else "") + "<extra>%{meta}</extra>")
+    fig.add_trace(go.Scatter(x=gx.ravel(), y=gy.ravel(), mode="markers", customdata=grid_cd(zs[s0]), text=city_txt,
+                             meta=labels[s0], name="click_grid", hovertemplate=hover, showlegend=False,
+                             marker=dict(size=9, opacity=0, color=INK), selected=dict(marker=dict(opacity=0)),
+                             unselected=dict(marker=dict(opacity=0))))
+    dyn.append(len(fig.data) - 1)
+    base_ann = list(fig.layout.annotations)
+
+    def fact_ann(i):
+        if not facts or not facts[i]:
+            return []
+        return [dict(x=0.995, y=0.005, xref="paper", yref="paper", xanchor="right", yanchor="bottom", align="left",
+                     text=facts[i], showarrow=False, font=dict(size=13, color=INK), bgcolor="rgba(255,255,255,0.88)",
+                     bordercolor=HAIRLINE, borderwidth=1, borderpad=5)]
+
+    fig.update_layout(annotations=base_ann + fact_ann(s0))
+    frames = []
+    for i in range(n):
+        data = [go.Heatmap(z=np.asarray(zs[i], float))]
+        if winds is not None:
+            wx, wy = _wind_xy(winds[i], lats, lons, wind_stride, wind_ref)
+            data.append(go.Scatter(x=wx, y=wy))
+        if rings is not None and ring_level:
+            data.append(go.Contour(z=np.abs(np.asarray(rings[i], float))))
+        data.append(go.Scatter(customdata=grid_cd(zs[i]), meta=labels[i]))
+        frames.append(go.Frame(name=names[i], data=data, traces=dyn,
+                               layout=dict(title=dict(text=labels[i]), annotations=base_ann + fact_ann(i))))
+    fig.frames = frames
+
+    def play(frame_ms, trans_ms):
+        return dict(frame=dict(duration=frame_ms, redraw=True), fromcurrent=True, mode="immediate",
+                    transition=dict(duration=0 if reduce_motion else trans_ms, easing="cubic-in-out"))
+
+    btn = dict(font=dict(size=13, color=INK), bgcolor="#ffffff", bordercolor=HAIRLINE)
+    fig.update_layout(
+        margin=dict(l=46, r=8, t=36, b=86),
+        updatemenus=[dict(type="buttons", direction="left", x=0.0, y=-0.06, xanchor="left", yanchor="top",
+                          showactive=False, pad=dict(t=0, r=6), **btn, buttons=[
+                              dict(label="Play", method="animate", args=[None, play(700, 400)]),
+                              dict(label="Pause", method="animate",
+                                   args=[[None], dict(frame=dict(duration=0, redraw=False), mode="immediate")]),
+                              dict(label="Slow", method="animate", args=[None, play(1400, 700)]),
+                              dict(label="Fast", method="animate", args=[None, play(350, 200)]),
+                          ])],
+        sliders=[dict(active=s0, x=0.36, len=0.64, y=-0.035, yanchor="top", pad=dict(t=0, b=0),
+                      currentvalue=dict(visible=False), font=dict(size=12, color=INK), tickcolor=HAIRLINE,
+                      bordercolor=HAIRLINE, activebgcolor=TURMERIC,
+                      steps=[dict(label=names[i], method="animate",
+                                  args=[[names[i]], dict(mode="immediate", frame=dict(duration=0, redraw=True),
+                                                         transition=dict(duration=0))]) for i in range(n)])],
+    )
     return fig

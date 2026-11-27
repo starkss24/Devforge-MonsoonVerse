@@ -85,6 +85,27 @@ def shock_box(label: str, pert) -> tuple | None:
     return None if pert is None else M.box_from_perturbation(pert)
 
 
+def spread_numbers(e: np.ndarray, mask: np.ndarray) -> dict:
+    """The judges' spread measure (monsoon_r1.scoring.causality_checks): energy outside the 3-cell neighbourhood of
+    the box on day 1 vs the mean of days 4-8, their ratio (needs > 1.5) and the day-1 share near the box."""
+    near = M.near_mask(mask)
+    out_e = np.array([float(e[k][~near].sum()) for k in range(e.shape[0])])
+    late = float(out_e[3:8].mean()) if e.shape[0] >= 8 else float(out_e[-1])
+    return {"out_day1": float(out_e[0]), "out_late": late,
+            "ratio": late / out_e[0] if out_e[0] > 0 else float("inf") if late > 0 else 0.0,
+            "near_frac_day1": float(M.near_frac_day1(e, mask)), "out_by_day": out_e}
+
+
+def _fmt_e(v: float) -> str:
+    return f"{v:.3g}"
+
+
+def _fmt_ratio(r: float) -> str:
+    if not np.isfinite(r):
+        return "from 0"
+    return f"{r:.1f}× day 1, needs > 1.5×"
+
+
 def _mark(ok: bool) -> str:
     return "✓" if ok else "✗"
 
@@ -199,7 +220,6 @@ def _render_analysis(ctx, run) -> None:
     e = M.energy(d, std)
     reg = M.region_sums(e, mask)
     prof = M.radial_profile(e, mask)
-    rch = M.reach(e, mask)
     if KIT is not None:
         chk = KIT.causality_checks(run.base, run.shocked, box, std)
         src = "organisers' code (monsoon_r1.scoring.causality_checks)"
@@ -214,12 +234,17 @@ def _render_analysis(ctx, run) -> None:
     (st.success if chk["localized"] and chk["propagates"] else st.warning)(
         f"**{line}**  \n{n_pass} of 5 kit checks pass for shock **{run.shock_label}**, window ending {run.last_day}.")
 
+    sp = spread_numbers(e, mask)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Day-1 energy near the box", f"{100 * M.near_frac_day1(e, mask):.0f}%")
-    c2.metric("Reach on day 1", f"{rch[0]} cells" if rch[0] >= 0 else "none",
-              help="Furthest ring (cells from the box) holding ≥ 5% of that day's energy.")
-    c3.metric("Reach on day 8", f"{rch[7]} cells" if len(rch) > 7 and rch[7] >= 0 else "none")
-    c4.metric("Largest change", f"{float(np.abs(d / std[None, :, None, None]).max()):.2f} std")
+    c1.metric("Day-1 energy near the box", f"{100 * sp['near_frac_day1']:.0f}%",
+              help="Share of day-1 response energy inside the box or within 3 cells of it. The judges need ≥ 60%.")
+    c2.metric("Energy outside, day 1", _fmt_e(sp["out_day1"]),
+              help="Response energy beyond the 3-cell neighbourhood of the box on day 1 (std² summed).")
+    c3.metric("Outside, days 4–8 (mean)", f"{_fmt_e(sp['out_late'])} ({_fmt_ratio(sp['ratio'])})",
+              help="The judges' spread test: this must exceed 1.5× day 1 and 2% of the peak daily energy, "
+                   "and nothing may jump more than 8 cells per day.")
+    c4.metric("Largest change", f"{float(np.abs(d / std[None, :, None, None]).max()):.2f} std",
+              help="The judges' stability limit is 5 std.")
 
     left, right = st.columns(2, gap="medium")
     fig = go.Figure()
@@ -229,6 +254,10 @@ def _render_analysis(ctx, run) -> None:
                                  marker=dict(size=11 if key == "near" else 8)))
     fig = style_chart(fig, "Response energy by region", "lead day", "energy (std² summed)")
     fig.update_xaxes(dtick=1)
+    day = int(getattr(ctx.controls, "day", 1))
+    if 1 <= day <= len(e):                          # in step with the day chosen on the Maps tab
+        fig.add_vline(x=day, line=dict(color=plots.TURMERIC, width=2.5), layer="below",
+                      annotation_text=f"day {day}", annotation_position="top", annotation_font=dict(size=13))
     left.plotly_chart(fig, key="shocklab_energy", config=NO_BAR, theme=None)
 
     fig = go.Figure()

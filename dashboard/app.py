@@ -103,6 +103,10 @@ div[data-testid="stDataFrame"] { font-stretch: 87.5%; }
 .mm-readout .mm-quiet { color: var(--muted); }
 .mm-meta { font-size: 0.98rem; color: var(--ink); margin: 0; }
 .mm-story { font-size: 1.02rem; color: var(--ink); margin: 0.15rem 0 0 0; }
+.mm-pill-detail { font-weight: 500; margin-left: 0.35rem; color: var(--muted); }
+section[data-testid="stSidebar"] .mm-pill-detail { color: #C9D5DF; }
+.mm-chip { margin-left: 0.6rem; font-size: 0.85rem; font-weight: 600; color: var(--blue); padding: 0.1rem 0.55rem;
+           border: 1px solid var(--blue); border-radius: 3px; background: #fff; white-space: nowrap; }
 /* Maps tab control panel */
 .mm-dayhead { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 0.7rem; row-gap: 0.1rem;
               color: var(--ink); margin: 0.2rem 0 0.9rem 0; }
@@ -140,6 +144,16 @@ def _header_html(pill: str) -> str:
             f'<p class="mm-sub">{SUBTITLE}</p>')
 
 
+@st.fragment(run_every="3s")
+def _reconnect_when_up(url: str) -> None:
+    """While the server is down, check /health every 3 s and reload the page the moment it answers."""
+    try:
+        client.health(url, timeout=1.0)
+    except client.ServerDown:
+        return
+    st.rerun(scope="app")
+
+
 def main() -> None:
 
     plots.apply_theme()
@@ -160,13 +174,18 @@ def main() -> None:
         health = client.health(controls.server_url)
     except client.ServerDown as e:
         err = str(e)
-    pill = sidebar.status_pill(health, err)
+    last = st.session_state.get("run")
+    last_rt = (last.timings_ms or {}).get("base_rt") if last is not None else None
+    pill = sidebar.status_pill(health, err, last_rt)
     header.markdown(_header_html(pill), unsafe_allow_html=True)
     if health is not None:
         status_slot.markdown(f"{pill}<div class='mm-side-meta'>Backend {health.get('backend', '?')} at "
                              f"{controls.server_url}</div>", unsafe_allow_html=True)
     else:
         status_slot.error(f"Server down: {START_HINT}.")
+        st.error(f"**The twin server is not answering.** Start it with `python serve.py --port 8000` (or change "
+                 f"the URL under Settings). This page reconnects by itself as soon as it is up.")
+        _reconnect_when_up(controls.server_url)
 
     if tab_maps.wants_run(controls, st.session_state.get("run"), health,
                           bool(st.session_state.get("live_mode", True))):
@@ -176,20 +195,23 @@ def main() -> None:
         else:
             win = get_window(arc, controls.last_day)
             try:
-                with st.spinner("Running the twin (live)…"):
-                    base, base_srv, base_rt = client.run_twin(controls.server_url, win["init_states"], win["doy_sincos"],
-                                                              steps=controls.steps)
-                    if controls.perturbation is None:
-                        shocked, sh_srv, sh_rt = base, base_srv, 0.0
-                    else:
-                        shocked, sh_srv, sh_rt = client.run_twin(controls.server_url, win["init_states"],
-                                                                 win["doy_sincos"], steps=controls.steps,
-                                                                 perturbation=controls.perturbation)
+                # small chip instead of a page-wide spinner; the last maps stay visible while this runs
+                header.markdown(_header_html(pill + "<span class='mm-chip'>Updating…</span>"), unsafe_allow_html=True)
+                base, base_srv, base_rt = client.run_twin(controls.server_url, win["init_states"], win["doy_sincos"],
+                                                          steps=controls.steps)
+                if controls.perturbation is None:
+                    shocked, sh_srv, sh_rt = base, base_srv, 0.0
+                else:
+                    shocked, sh_srv, sh_rt = client.run_twin(controls.server_url, win["init_states"],
+                                                             win["doy_sincos"], steps=controls.steps,
+                                                             perturbation=controls.perturbation)
                 st.session_state["run"] = RunResult(
                     last_day=controls.last_day, window=win, shock_label=controls.shock_label,
                     perturbation=controls.perturbation, base=base, shocked=shocked,
                     timings_ms={"base_server": base_srv, "base_rt": base_rt, "shock_server": sh_srv, "shock_rt": sh_rt})
+                header.markdown(_header_html(sidebar.status_pill(health, None, base_rt)), unsafe_allow_html=True)
             except client.ServerDown as e:
+                header.markdown(_header_html(pill), unsafe_allow_html=True)
                 st.error(f"Run failed: {e}")
 
     ctx = TabContext(controls=controls, run=st.session_state.get("run"), archive=arc, health=health)

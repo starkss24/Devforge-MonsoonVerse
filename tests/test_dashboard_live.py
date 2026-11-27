@@ -231,7 +231,8 @@ def test_app_live_mode_runs_without_the_button(live_server):
     at.session_state["server_url"] = "http://127.0.0.1:1"     # nothing listens: Live must not run or error
     at.run()
     assert not at.exception and "run" not in at.session_state
-    assert [e.value for e in at.error] and all(e.value.startswith("Server down") for e in at.error)  # status only
+    errs = [e.value for e in at.error]                         # only the "server down" status + card, with the fix
+    assert errs and all(("Server down" in e or "not answering" in e) and "serve.py --port 8000" in e for e in errs)
     assert at.toggle(key="live_mode").value is True           # Live is on by default
     at.text_input(key="server_url").set_value(live_server).run()
     assert not at.exception and at.session_state["run"].shock_label == sidebar.DEFAULT_PRESET  # first run, no click
@@ -247,9 +248,14 @@ def test_app_live_mode_runs_without_the_button(live_server):
     at.button(key="day_prev").click().run()
     assert at.select_slider(key="lead_day").value == 1
     assert any("Day 1:" in m.value for m in at.markdown)       # the plain-language spread sentence
-    # Play animates days 1..10 and ends on day 10
-    at.button(key="play_button").click().run()
-    assert not at.exception and at.select_slider(key="lead_day").value == 10
+    # the big map is ONE animated figure: a frame per timeline day (-2..10), played in the browser, starting on
+    # the chosen day; frames carry their own title and facts
+    import json
+    main_map = json.loads(at.get("plotly_chart")[0].proto.spec)
+    assert [f["name"] for f in main_map["frames"]] == [str(d) for d in range(-2, 11)]
+    assert main_map["layout"]["sliders"][0]["active"] == 3                       # day 1
+    assert [b["label"] for b in main_map["layout"]["updatemenus"][0]["buttons"]] == ["Play", "Pause", "Slow", "Fast"]
+    assert "day 4" in main_map["frames"][6]["layout"]["title"]["text"]
     # place forecast: a city switch re-charts without a server call
     at.selectbox(key="probe_place").set_value("Delhi").run()
     assert not at.exception and at.session_state["run"] is run
@@ -265,3 +271,71 @@ def test_app_live_mode_runs_without_the_button(live_server):
         assert not at.exception, view
     at.select_slider(key="lead_day").set_value(14).run()      # beyond the archive's 10 observed days
     assert not at.exception
+
+
+# ---------- dashboard v2: animated map, strip, Shock Lab spread measure, ensemble caption, status ----------
+def test_map_frames_and_animated_figure():
+    r = _fake_run()
+    box = (8.5, 12.5, 70.5, 74.5)
+    days = tab_maps.timeline_days(10)
+    fr = tab_maps.map_frames(r, "t2m", "effect", days, box, "°C", LATS, LONS)
+    assert len(fr["z"]) == len(fr["labels"]) == len(fr["facts"]) == len(fr["effect"]) == 13
+    assert not np.any(fr["z"][0]) and "real data" in fr["labels"][0] and "forecast" in fr["labels"][4]
+    assert "inside the box" in fr["facts"][5]
+    obs = tab_maps.map_frames(_fake_run(steps=15), "t2m", "observed", tab_maps.timeline_days(15), box, "°C", LATS, LONS)
+    assert np.isnan(obs["z"][-1]).all() and "No observed weather" in obs["facts"][-1]       # day 15: beyond the archive
+    fig = plots.twin_map_animated(fr["z"], LATS, LONS, "Δ °C", plots.DIVERGING, -1, 1, 0.0, labels=fr["labels"],
+                                  facts=fr["facts"], rings=fr["effect"], ring_level=0.05, box=box, start=4,
+                                  frame_names=[str(d) for d in days], probe=(20.5, 77.5), click_action="move")
+    assert [f.name for f in fig.frames] == [str(d) for d in days] and fig.layout.sliders[0].active == 4
+    front = next(t for t in fig.data if t.name == "front")
+    assert front.contours.start == front.contours.end == 0.05                # the spreading-front ring
+    grid_i = [i for i, t in enumerate(fig.data) if t.name == "click_grid"][0]
+    assert grid_i in fig.frames[0].traces and 0 in fig.frames[0].traces       # heatmap + click values follow frames
+    assert fig.layout.sliders[0].activebgcolor == plots.TURMERIC              # the selected day is the gold one
+    slow = plots.twin_map_animated(fr["z"], LATS, LONS, "Δ", plots.DIVERGING, -1, 1, 0.0, labels=fr["labels"],
+                                   reduce_motion=True)
+    assert slow.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] == 0
+
+
+def test_strip_selected_days():
+    d = np.stack([np.full((32, 36), k + 1.0) for k in range(10)])
+    s = plots.diff_strip(d, LATS, LONS, "K", days=(1, 2, 4, 6, 8, 10), selected=4)
+    hms = [t for t in s.data if t.type == "heatmap"]
+    assert [h.name for h in hms] == [f"diff day {k}" for k in (1, 2, 4, 6, 8, 10)]
+    assert hms[0].zmax == pytest.approx(10.0)                                 # one scale over ALL ten days
+    hits = [int(t.customdata[0]) for t in s.data if t.type == "scatter" and t.customdata is not None]
+    assert hits == [1, 2, 4, 6, 8, 10]
+    assert len([x for x in s.layout.shapes if x.name == "selected_day"]) == 1
+    assert not [x for x in plots.diff_strip(d, LATS, LONS, "K", days=(1, 2), selected=7).layout.shapes
+                if x.name == "selected_day"]                                  # day not shown: no outline
+
+
+def test_shocklab_spread_numbers_match_kit_rule():
+    import tab_shocklab
+    import metrics as M
+    box = (14.5, 18.5, 80.5, 84.5)
+    mask = M.mask_from_box(box)
+    e = np.zeros((10, 32, 36))
+    e[:, mask] = 1.0
+    far = ~M.near_mask(mask)
+    e[0][far] = 0.001                                                          # tiny outside on day 1
+    e[3:8][:, far] = 0.01                                                      # 10x more outside on days 4-8
+    sp = tab_shocklab.spread_numbers(e, mask)
+    assert sp["out_late"] == pytest.approx(10 * sp["out_day1"]) and sp["ratio"] == pytest.approx(10.0)
+    assert sp["near_frac_day1"] > 0.6
+    assert "needs > 1.5" in tab_shocklab._fmt_ratio(sp["ratio"])
+
+
+def test_ensemble_caption_says_what_the_curve_does():
+    import tab_ensemble
+    shrink = np.array([[0.02] * 6, [0.01] * 6, [0.004] * 6])
+    grow = shrink[::-1]
+    assert "shrinks" in tab_ensemble.spread_caption(shrink, 0.005) and "grows" not in tab_ensemble.spread_caption(shrink, 0.005)
+    assert "grows" in tab_ensemble.spread_caption(grow, 0.005)
+
+
+def test_status_pill_details():
+    ok = sidebar.status_pill({"model_name": "m", "backend": "onnx", "post": "loaded"}, None, 157.4)
+    assert "Server ready, running m" in ok and "onnx, post-processing on, 157 ms" in ok
+    assert "post-processing on" not in sidebar.status_pill({"model_name": "m", "backend": "onnx", "post": "absent"})
