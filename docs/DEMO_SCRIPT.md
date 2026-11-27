@@ -51,7 +51,7 @@ Follows the playbook's 7 steps. The labels below are copied from the dashboard c
 
 **Click.** Tab **Ensemble**. Leave **Members (live calls)** at 8 and **Input noise (% of channel std)** at 0.5. Press **▶ Run 8-member ensemble**. Point at the spread map and the **Spread vs lead day** chart.
 
-**Say.** "The server itself is deterministic. Here the dashboard nudges the 3 start days with tiny noise and makes 8 live calls. Where the members disagree, the forecast is less certain, and the chart shows how that grows with lead day." `[TO CONFIRM: Aether]`: which channel actually spreads most with the final model.
+**Say.** "The server itself is deterministic. Here the dashboard nudges the 3 start days with tiny noise and makes 8 live calls. Notice the spread does not grow: it *shrinks* with lead day. Our model damps small start errors instead of amplifying them, and the climatology blend halves them further at long leads. That is stable, but it also means this spread is not a forecast of uncertainty: real weather errors grow, which is why our skill against climatology is near zero by day 8. A calibrated ensemble would need perturbed models, not just perturbed starts." (Measured by Aether on the final model, 2019-07-15, 2020-01-20, 2021-04-25: spread falls from about 0.004 to 0.002 of channel std from day 1 to day 10 on every channel; temperature keeps the most spread at day 10.)
 
 **If it fails.** If it is slow, cut to 4 members with the slider and say "each member is one live call." If the server is down, skip the step and say what the tab shows.
 
