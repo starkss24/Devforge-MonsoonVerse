@@ -77,7 +77,8 @@ section[data-testid="stSidebar"] :focus-visible { outline-color: #A9CBE6 !import
 .mm-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; display: inline-block; }
 .mm-ok { color: var(--paddy); } .mm-ok .mm-dot { background: var(--paddy); }
 .mm-down { color: var(--signal); } .mm-down .mm-dot { background: var(--signal); }
-section[data-testid="stSidebar"] .mm-pill { white-space: normal; }
+section[data-testid="stSidebar"] .mm-pill { white-space: normal; display: block; }
+section[data-testid="stSidebar"] .mm-dot { margin-right: 0.4rem; }
 section[data-testid="stSidebar"] .mm-ok { color: #9FD3AE; }
 
 section[data-testid="stSidebar"] .mm-ok .mm-dot { background: #7CC191; }

@@ -238,11 +238,12 @@ def _render_analysis(ctx, run) -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Day-1 energy near the box", f"{100 * sp['near_frac_day1']:.0f}%",
               help="Share of day-1 response energy inside the box or within 3 cells of it. The judges need ≥ 60%.")
-    c2.metric("Energy outside, day 1", _fmt_e(sp["out_day1"]),
-              help="Response energy beyond the 3-cell neighbourhood of the box on day 1 (std² summed).")
-    c3.metric("Outside, days 4–8 (mean)", f"{_fmt_e(sp['out_late'])} ({_fmt_ratio(sp['ratio'])})",
-              help="The judges' spread test: this must exceed 1.5× day 1 and 2% of the peak daily energy, "
-                   "and nothing may jump more than 8 cells per day.")
+    c2.metric("Outside the near zone", f"{sp['out_day1']:.2g} → {sp['out_late']:.2g}",
+              help="Response energy beyond the 3-cell neighbourhood of the box (std² summed): day 1 → mean of "
+                   "days 4–8.")
+    c3.metric("Growth outside (needs > 1.5×)", f"{sp['ratio']:.1f}×" if np.isfinite(sp["ratio"]) else "from 0",
+              help="The judges' spread test: days 4–8 outside energy must exceed 1.5× day 1 and 2% of the peak "
+                   "daily energy, and nothing may jump more than 8 cells per day.")
     c4.metric("Largest change", f"{float(np.abs(d / std[None, :, None, None]).max()):.2f} std",
               help="The judges' stability limit is 5 std.")
 

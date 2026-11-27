@@ -295,7 +295,10 @@ def test_map_frames_and_animated_figure():
     assert fig.layout.sliders[0].activebgcolor == plots.TURMERIC              # the selected day is the gold one
     slow = plots.twin_map_animated(fr["z"], LATS, LONS, "Δ", plots.DIVERGING, -1, 1, 0.0, labels=fr["labels"],
                                    reduce_motion=True)
-    assert slow.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] == 0
+    assert slow.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] == 1400         # reduce motion: slow
+    for b in [x for x in fig.layout.updatemenus[0].buttons if x.label != "Pause"]:   # no easing: it blanks heatmaps
+        assert b.args[1]["transition"]["duration"] == 0
+    assert fig.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] == 700
 
 
 def test_strip_selected_days():

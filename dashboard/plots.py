@@ -613,7 +613,7 @@ def twin_map_animated(zs, lats, lons, units: str, cmap: str, zmin, zmax, zmid=No
     def fact_ann(i):
         if not facts or not facts[i]:
             return []
-        return [dict(x=0.995, y=0.005, xref="paper", yref="paper", xanchor="right", yanchor="bottom", align="left",
+        return [dict(x=0.995, y=0.995, xref="paper", yref="paper", xanchor="right", yanchor="top", align="left",
                      text=facts[i], showarrow=False, font=dict(size=13, color=INK), bgcolor="rgba(255,255,255,0.88)",
                      bordercolor=HAIRLINE, borderwidth=1, borderpad=5)]
 
@@ -631,9 +631,12 @@ def twin_map_animated(zs, lats, lons, units: str, cmap: str, zmin, zmax, zmid=No
                                layout=dict(title=dict(text=labels[i]), annotations=base_ann + fact_ann(i))))
     fig.frames = frames
 
-    def play(frame_ms, trans_ms):
-        return dict(frame=dict(duration=frame_ms, redraw=True), fromcurrent=True, mode="immediate",
-                    transition=dict(duration=0 if reduce_motion else trans_ms, easing="cubic-in-out"))
+    # Frames switch instantly: Plotly cannot ease heatmaps, and an eased transition blanks the heatmap while it runs
+    # (tested in Chromium). Reduce motion = the slow pace for Play.
+    def play(frame_ms, _unused_trans_ms=0):
+        ms = max(frame_ms, 1400) if reduce_motion else frame_ms
+        return dict(frame=dict(duration=ms, redraw=True), fromcurrent=True, mode="immediate",
+                    transition=dict(duration=0))
 
     btn = dict(font=dict(size=13, color=INK), bgcolor="#ffffff", bordercolor=HAIRLINE)
     fig.update_layout(
@@ -646,7 +649,7 @@ def twin_map_animated(zs, lats, lons, units: str, cmap: str, zmin, zmax, zmid=No
                               dict(label="Slow", method="animate", args=[None, play(1400, 700)]),
                               dict(label="Fast", method="animate", args=[None, play(350, 200)]),
                           ])],
-        sliders=[dict(active=s0, x=0.36, len=0.64, y=-0.035, yanchor="top", pad=dict(t=0, b=0),
+        sliders=[dict(active=s0, x=0.45, len=0.55, y=-0.035, yanchor="top", pad=dict(t=0, b=0),
                       currentvalue=dict(visible=False), font=dict(size=12, color=INK), tickcolor=HAIRLINE,
                       bordercolor=HAIRLINE, activebgcolor=TURMERIC,
                       steps=[dict(label=names[i], method="animate",

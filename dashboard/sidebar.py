@@ -204,8 +204,8 @@ def render_sidebar(arc, status_slot=None, display=None) -> Controls:
 
     server_url = settings.text_input("Twin server URL", value=default_server_url(), key="server_url")
     settings.toggle("Reduce motion", key="reduce_motion",
-                    help="No easing between days when the map plays (frames simply switch). For viewers who prefer "
-                         "less motion.")
+                    help="The map plays at the slow pace (1.4 s per day) whichever speed is pressed. For viewers who "
+                         "prefer less motion.")
 
     valid = valid_last_days(arc)
     vmin, vmax = valid.min().astype(dt.date), valid.max().astype(dt.date)
