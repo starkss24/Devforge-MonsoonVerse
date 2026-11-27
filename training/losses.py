@@ -10,6 +10,18 @@ def _grads(x):
     return x[..., :, 1:] - x[..., :, :-1], x[..., 1:, :] - x[..., :-1, :]
 
 
+def anomaly_amplitude_loss(pred_std, target_std, clim_std, eps: float = 1e-6):
+    """Penalise anomalies that are too weak (regression to the mean), per sample, lead and channel.
+
+    pred/target/clim [B,k,6,H,W] in standardized model space; clim is the climatology of each target day.
+    Compares the spatial RMS of (forecast - climatology) with that of (truth - climatology). An MSE-only model
+    shrinks anomalies with lead time, which also makes painted shocks decay in place instead of spreading.
+    """
+    ap = torch.sqrt(((pred_std - clim_std) ** 2).mean(dim=(-2, -1)) + eps)
+    at = torch.sqrt(((target_std - clim_std) ** 2).mean(dim=(-2, -1)) + eps)
+    return ((ap - at) ** 2).mean()
+
+
 def rollout_loss(pred_std, target_std, rain_weight: float = 2.0, grad_weight: float = 0.1,
                  grad_mode: str = "match"):
     """pred/target [B,k,6,H,W] -> scalar.

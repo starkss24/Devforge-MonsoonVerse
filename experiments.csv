@@ -24,3 +24,5 @@ v2_ens2_cap05,"ens2 + blend cap 0.5",,,,,,True,"kit 100val 68.06; real12 57.92; 
 v2_e5b_cap05_slope15,"e5b + blend cap 0.5 + slope cap 1.5",,,,,,True,"real2023(4) 56.89; real12 60.95; CSI 4.8 on 2023 (vs ens 9.6); 100val pending"
 v2_f1b_all_years,"all-years 2005-2021 retrain (fixed schedule) + post fit 2005-2021",,,,,,True,"REJECTED: real2023(4) 46.38, real12 52.94 (vs e5b 55.31/58.40); with cap05_slope15 49.80/56.90"
 v2_monsoon_stall,"post variants vs monsoon_stall propagation",,,,,,True,"NOT FIXABLE IN POST: raw model propagates ~5/12 windows (growth 1.14 < 1.5); all post variants ~3/14; needs retrain (beyond 06:30 cut-off)"
+s2_onestep,seed 2 one-step (E1 recipe) for a larger ensemble,0.7422,0.8467,0.9486,1.0044,0.3013,True,india_climate_train.nc | select=old | kit_sel=-14.03 kit_ss=-0.0081 kit_csi_skill=+0.0404 kit_blur=10.00
+s2_multi,seed 2 E5b recipe for a larger ensemble,0.7542,0.7898,0.8288,0.9593,0.2546,True,india_climate_train.nc | select=kit | kit_sel=-34.53 kit_ss=+0.0831 kit_csi_skill=+0.0255 kit_blur=9.93
