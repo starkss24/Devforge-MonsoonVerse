@@ -26,12 +26,12 @@ The user is **Aether — model lead** (Claude pair): residual U-Net, losses, mul
 - Grid 32×36, 1°, lat 6.5–37.5, lon 65.5–100.5 (regional box → replicate/reflect padding, never circular).
 - Validity: finite only, rain ≥ 0, t2m within −40..60 °C; a zero perturbation must equal no perturbation (within 1e-3 of each channel's std).
 - Limits: `/health` within 120 s; each `/simulate` < 5 s on 4 CPU cores, 6 GB RAM, no GPU, no internet. Target < 1 s.
-- Repo: `serve.py` at root, listens on `0.0.0.0`, weights inside repo (Git LFS), writes only to `/tmp`.
+- Repo: `serve.py` at root, listens on `0.0.0.0`, weights inside repo (plain git files, no LFS: see `.gitattributes`), writes only to `/tmp`.
 
 ## Hard rules (reject these in review)
 
 - No weather APIs, downloads, or internet at inference; no hardcoded dates or lookup tables of past weather.
-- Never commit data (`data/`, `*.nc`) or pre-rendered dashboard images. Weights only via Git LFS (`*.pt`, `*.onnx`); only Vishwak commits to `weights/`.
+- Never commit data (`data/`, `*.nc`) or pre-rendered dashboard images. Weights (`weights/model.onnx`, `model.pt`, `post.npz`, `model_meta.json`) are committed as plain git files (team decision, so a clone without `git lfs pull` still works); weight changes reach `main` only after Vishwak re-verifies them through `serve.py`.
 - Anything `serve.py` imports (including `twin_model/`) may use only: torch (CPU), numpy, scipy, pandas, xarray, scikit-learn, lightgbm, onnxruntime, fastapi, flask, uvicorn. Never Streamlit/Plotly.
 - Never "fix" a failing check by loosening it; never wrap errors in a silent try/except that returns zeros.
 - Split data by year (train 2005–2018, validate 2019–2021), never by random day.
@@ -46,7 +46,9 @@ Model lane (Aether): research/training code, not imported by the server. Module 
 - `training/` — data windows, losses, training CLI, `fit_post.py` (fits post-processing), `kit_eval.py` (scores a checkpoint with the kit's own scoring → projected points /70, appends to `kit_scores.csv`).
 - Other lanes: `eval/` (scorer, shock tests), `data_tools/`, `impact/`, `dashboard/`, `scripts/`, `tools/validate.py`.
 
-Integration gap (open): the post-processing (climatology blend per lead + rain quantile map per lead) is applied after the whole rollout and depends on the lead day, so it cannot live inside the one-day exported `step`. Root `twin.py` needs to apply it after its loop; without it the model scores ~45 instead of ~55 /70 on real 2023 windows. See `docs/HANDOFF_VISHWAK.md`.
+Post-processing (climatology blend per lead + rain quantile map per lead) applies to the finished rollout, so it lives in `weights/post.npz` and root `twin.py` applies it with `postproc.py` after its loop (never inside the one-day `step`). Write `post.npz` with `postproc.save_npz` (`training/export.py` does).
+
+Models: `main` serves `aether-unet-e5b`; candidate `aether-unet-v2-ens2` (2-seed `EnsembleUNet` + post with blend cap 0.5 and rain-map slope cap 1.5) is on `feat/aether-v2`, see `docs/MODEL_V2.md`. Judge new weights by `training/kit_eval.py` on 100 held-out windows AND `training/eval_real.py` on the real 2023-2025 windows in `data/eval2023/` (git-ignored); shock behaviour with `training/shock_lab.py`.
 
 Key ML invariants (PyTorch traps):
 - Rain lives in log1p space inside the model; denormalize in order: un-standardize, then `expm1`, then clamp ≥ 0.
