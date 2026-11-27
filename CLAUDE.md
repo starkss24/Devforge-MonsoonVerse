@@ -48,7 +48,7 @@ Model lane (Aether): research/training code, not imported by the server. Module 
 
 Post-processing (climatology blend per lead + rain quantile map per lead) applies to the finished rollout, so it lives in `weights/post.npz` and root `twin.py` applies it with `postproc.py` after its loop (never inside the one-day `step`). Write `post.npz` with `postproc.save_npz` (`training/export.py` does).
 
-Models: `main` serves `aether-unet-e5b`; candidate `aether-unet-v2-ens2` (2-seed `EnsembleUNet` + post with blend cap 0.5 and rain-map slope cap 1.5) is on `feat/aether-v2`, see `docs/MODEL_V2.md`. Judge new weights by `training/kit_eval.py` on 100 held-out windows AND `training/eval_real.py` on the real 2023-2025 windows in `data/eval2023/` (git-ignored); shock behaviour with `training/shock_lab.py`.
+Models: `main` serves `aether-unet-v2-ens2` (2-seed `EnsembleUNet` + post with blend cap 0.5 and rain-map slope cap 1.5; merged 2026-11-27 after re-verification through `serve.py`: 67.06/70 on 100 held-out windows); the previous model was `aether-unet-e5b` (65.78), see `docs/MODEL_V2.md`. Judge new weights by `training/kit_eval.py` on 100 held-out windows AND `training/eval_real.py` on the real 2023-2025 windows in `data/eval2023/` (git-ignored); shock behaviour with `training/shock_lab.py`.
 
 Key ML invariants (PyTorch traps):
 - Rain lives in log1p space inside the model; denormalize in order: un-standardize, then `expm1`, then clamp ≥ 0.
