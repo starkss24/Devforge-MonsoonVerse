@@ -14,7 +14,6 @@ from __future__ import annotations
 import datetime as dt
 import html
 import math
-import time
 
 import numpy as np
 import streamlit as st
@@ -45,12 +44,12 @@ def wants_run(controls, run, health, live: bool) -> bool:
     return bool(live) and health is not None and (run is None or is_stale(controls, run))
 
 
-MAP_HEIGHT = 486       # px; the big map, sized to fill the left column at 1280x720
+MAP_HEIGHT = 540       # px; the big map incl. Play / speed / day slider under it, at 1280x720
 PANEL_HEIGHT = 304     # px; each of the side-by-side maps
-STRIP_HEIGHT = 108     # px; ten small maps in one row
+STRIP_HEIGHT = 170     # px; six maps in one row (days 1, 2, 4, 6, 8, 10)
+STRIP_DAYS = (1, 2, 4, 6, 8, 10)
 WIND_STRIDE = 3
 WIND_REF = 10.0        # m/s shown by the reference arrow; same scale on every map
-PLAY_SECONDS = 0.4     # pause per frame when Play runs the timeline
 DAYS = list(range(1, 11))
 N_INPUT = 3            # real days the twin starts from (kit contract)
 NO_BAR = {"displayModeBar": False}
@@ -245,6 +244,33 @@ def fade_summary(effect, box, units: str, lats, lons) -> str:
     return f"Inside the box: {', '.join(parts)} {units}; {fade}."
 
 
+def map_frames(run, ch: str, view: str, days, box, du: str, lats, lons) -> dict:
+    """Per-day frames for the animated map: z (display units, NaN where there is no data), titles, the short facts
+    box drawn on the map, and the shock effect per day (for the spreading-front ring)."""
+    from common import box_mask
+    is_eff = view == "effect"
+    m = box_mask(*box) if box is not None else None
+    out = {"z": [], "labels": [], "facts": [], "effect": []}
+    nan = np.full((len(lats), len(lons)), np.nan)
+    for day in days:
+        raw = view_field(run, ch, day, view)
+        z = nan if raw is None else plots.to_display(ch, raw, is_diff=is_eff)
+        e = plots.to_display(ch, view_field(run, ch, day, "effect"), is_diff=True)
+        d = day_date(run.last_day, day)
+        when = "real data" if day <= 0 else ("forecast" if day <= 10 else "experimental")
+        out["labels"].append(f"{LAYER_TEXT[ch]}, {VIEW_TEXT[view].lower()}: day {day}, {d:%a} {d.day} {d:%b} ({when})")
+        if raw is None:
+            facts = ["No observed weather in the archive for this day"]
+        else:
+            facts = [f"Largest {'change' if is_eff else 'value'}: {_fmt_num(float(np.nanmax(np.abs(z) if is_eff else z)))} {du}"]
+            if m is not None and m.any() and (is_eff or view == "shocked"):
+                facts.append(f"Shock effect inside the box: {float(np.nanmean(e[m])):+.2f} {du}")
+        out["z"].append(z)
+        out["facts"].append("<br>".join(facts))
+        out["effect"].append(e)
+    return out
+
+
 def probe_options() -> list[str]:
     return [BOX_CENTRE, *CITIES, CLICKED]
 
@@ -279,10 +305,6 @@ def _shift_day(delta: int) -> None:
     st.session_state["lead_day"] = min(hi, max(lo, d + delta))
 
 
-def _on_play() -> None:
-    st.session_state["play_request"] = True                  # the timeline jumps to the last day after the run
-
-
 def _on_map_click(key: str) -> None:
     pt = latlon_from_selection(st.session_state.get(key))
     if pt is None:
@@ -307,15 +329,13 @@ def _layer_row() -> None:
     c2.toggle("Wind arrows", value=True, key="show_wind")
 
 
-def _day_buttons(where, has_run: bool, steps: int) -> None:
-    b1, b2, b3 = where.columns(3, gap="small")
+def _day_buttons(where) -> None:
+    """Earlier / Later (keys B / N). Playing all days is done by the Play button under the map, in the browser."""
+    b1, b2 = where.columns(2, gap="small")
     b1.button("Earlier", icon=":material/chevron_left:", key="day_prev", on_click=_shift_day, args=(-1,),
               shortcut="B", width="stretch", help="Previous day (key B)")
     b2.button("Later", icon=":material/chevron_right:", key="day_next", on_click=_shift_day, args=(1,),
               shortcut="N", width="stretch", help="Next day (key N)")
-    b3.button("Play", icon=":material/play_arrow:", key="play_button", on_click=_on_play, shortcut="P",
-              width="stretch", disabled=not has_run,
-              help=f"Run the timeline from the real days to day {steps} (key P)")
 
 
 def _dayhead_html(k: int, last_day: str) -> str:
@@ -338,26 +358,19 @@ def render(ctx) -> None:
     st.session_state.setdefault("probe_place", BOX_CENTRE)
     _layer_row()
 
-    left, right = st.columns([1.18, 0.82], gap="medium")
+    left, right = st.columns([1.2, 0.8], gap="medium")
     map_ph = left.empty()
-    playing = bool(st.session_state.pop("play_request", False)) and run is not None
     with right:
         head_ph = st.empty()
-        slider_ph = st.empty()     # the timeline; while Play runs, a progress bar in the same place
-        _day_buttons(st, run is not None, steps)
+        st.select_slider("Timeline", days, key="lead_day", format_func=timeline_label, label_visibility="collapsed")
+        _day_buttons(st)
         st.segmented_control("Show", VIEWS, key="map_view", required=True, label_visibility="collapsed",
                              format_func=lambda v: VIEW_TEXT[v])
         st.segmented_control("Map clicks", [CLICK_MOVE, CLICK_PROBE], key="click_mode", required=True,
                              label_visibility="collapsed", format_func=lambda m: CLICK_TEXT[m])
         info_ph = st.empty()
 
-    def timeline_widget() -> None:
-        slider_ph.select_slider("Timeline", days, key="lead_day", format_func=timeline_label,
-                                label_visibility="collapsed")
-
     k = int(st.session_state.get("lead_day", 1))
-    if not playing:
-        timeline_widget()
     if run is None:
         head_ph.markdown(_dayhead_html(k, c.last_day), unsafe_allow_html=True)
         live = st.session_state.get("live_mode", True)
@@ -380,7 +393,7 @@ def render(ctx) -> None:
     shocked_run = run.perturbation is not None
     cmap = plots.CHANNEL_CMAPS.get(ch, "Viridis")
 
-    # one colour scale for the whole timeline (values) and one for the shock effect, so Play compares honestly
+    # one colour scale for the whole timeline (values) and one for the shock effect, so frames compare honestly
     vals = [run.window["init_states"][:, ci], run.base[:, ci], run.shocked[:, ci]]
     if run.window.get("truth") is not None and len(run.window["truth"]):
         vals.append(run.window["truth"][:, ci])
@@ -414,79 +427,59 @@ def render(ctx) -> None:
         x = run.window["init_states"][day + N_INPUT - 1]
         return x[CH["u10"]], x[CH["v10"]]
 
-    def draw(day: int, interactive: bool) -> None:
-        raw = view_field(run, ch, day, view)
-        is_eff = view == "effect"
-        title = f"{LAYER_TEXT[ch]}: {VIEW_TEXT[view].lower()}, {timeline_label(day).lower()}"
-        if raw is None:
-            z = np.full((len(lats), len(lons)), np.nan)
-            note = "The archive has no observed weather for this day"
-        else:
-            z = plots.to_display(ch, raw, is_diff=is_eff)
-            note = ("No change on this day" if is_eff and float(np.nanmax(np.abs(z))) < plots.ZERO_DIFF else None)
-        fig = plots.twin_map(z, lats, lons, title, ("Δ " + du) if is_eff else units,
-                             plots.DIVERGING if is_eff else cmap,
-                             zmin=-elim if is_eff else zmin, zmax=elim if is_eff else zmax,
-                             zmid=0.0 if is_eff else zmid, box=box,
-                             wind=None if is_eff else wind_for(day), coast=coast, height=MAP_HEIGHT,
-                             wind_stride=WIND_STRIDE, wind_ref=WIND_REF, note=note)
-        fig.add_trace(plots.probe_marker_trace(lats[pi], lons[pj]))
-        if interactive:
-            plots.add_click_grid(fig, np.nan_to_num(z), lats, lons, ("Δ " + du) if is_eff else du, action)
-            fig.update_layout(dragmode="pan")
-            map_ph.plotly_chart(fig, key="maps_main", on_select=_map_click_cb("maps_main"), selection_mode="points",
-                                config=plots.MAP_CONFIG, theme=None)
-        else:
-            map_ph.plotly_chart(fig, key=f"maps_main_play_{day}", config=plots.MAP_CONFIG, theme=None)
-        head_ph.markdown(_dayhead_html(day, run.last_day), unsafe_allow_html=True)
+    # ---- the animated map: one frame per timeline day, played in the browser
+    is_eff = view == "effect"
+    frames = map_frames(run, ch, view, days, box, du, lats, lons)
+    peak1 = float(np.nanmax(np.abs(eff[0]))) if shocked_run else 0.0
+    ring_level = 0.1 * peak1 if is_eff and peak1 >= plots.ZERO_DIFF else None
+    fig = plots.twin_map_animated(
+        frames["z"], lats, lons, ("Δ " + du) if is_eff else units, plots.DIVERGING if is_eff else cmap,
+        -elim if is_eff else zmin, elim if is_eff else zmax, 0.0 if is_eff else zmid,
+        labels=frames["labels"], facts=frames["facts"],
+        winds=None if (is_eff or not c.show_wind) else [wind_for(d) for d in days],
+        rings=frames["effect"] if ring_level else None, ring_level=ring_level, box=box, coast=coast,
+        start=days.index(k), frame_names=[str(d) for d in days], probe=(lats[pi], lons[pj]), click_action=action,
+        height=MAP_HEIGHT, wind_stride=WIND_STRIDE, wind_ref=WIND_REF,
+        reduce_motion=bool(st.session_state.get("reduce_motion", False)))
+    map_ph.plotly_chart(fig, key="maps_main", on_select=_map_click_cb("maps_main"), selection_mode="points",
+                        config=plots.MAP_CONFIG, theme=None)
+    head_ph.markdown(_dayhead_html(k, run.last_day), unsafe_allow_html=True)
 
-        # side panel facts: place value, spread story, check against the real day
-        lines = []
-        pv = view_field(run, ch, day, "shocked")
-        bv = view_field(run, ch, day, "base")
-        if pv is not None:
-            v_s = float(plots.to_display(ch, pv)[pi, pj])
-            v_b = float(plots.to_display(ch, bv)[pi, pj])
-            extra = f" (no shock {_fmt_num(v_b)})" if shocked_run and abs(v_s - v_b) > 1e-9 else ""
-            lines.append(f"<b>{html.escape(plabel[:1].upper() + plabel[1:])}</b>: {_fmt_num(v_s)} {du}{extra}")
-        if shocked_run and day >= 1:
-            lines.append(html.escape(describe_spread(eff[:min(steps, len(eff))], box, lats, lons, day)))
-        if shocked_run:
-            lines.append(html.escape(fade_summary(eff, box, du, lats, lons)))
-        obs = view_field(run, ch, day, "observed")
-        if day >= 1 and obs is not None:
-            cmp = compare_observed(plots.to_display(ch, bv), plots.to_display(ch, obs))
-            lines.append(f"Against the real day (no shock): peak <b>{_fmt_num(cmp['peak_pred'])}</b> vs "
-                         f"<b>{_fmt_num(cmp['peak_obs'])} {du}</b> observed; detail kept "
-                         f"<b>{cmp['detail_pct']:.0f}%</b> of the real variation (100% = no blur); typical error "
-                         f"<b>{_fmt_num(cmp['rmse'])} {du}</b>.")
-        elif day >= 1:
-            lines.append("<span class='mm-quiet'>No observed weather in the archive for this day.</span>")
-        t = run.timings_ms or {}
-        calls = (f"Two live calls: {_fmt_ms(t.get('base_rt'))} and {_fmt_ms(t.get('shock_rt'))}; "
-                 f"{shock_cells(run.perturbation)} cells shocked, {shock_txt}." if shocked_run else
-                 f"One live call: {_fmt_ms(t.get('base_rt'))}; no shock painted.")
-        lines.append(f"<span class='mm-quiet'>{calls}</span>")
-        info_ph.markdown("<div class='mm-facts'>" + "".join(f"<p>{x}</p>" for x in lines) + "</div>",
-                         unsafe_allow_html=True)
-
-    if playing:
-        for i, day in enumerate(days):
-            slider_ph.progress((i + 1) / len(days), text=f"Playing: {timeline_label(day)} (to day {steps})")
-            draw(day, interactive=False)
-            time.sleep(PLAY_SECONDS)
-        k = days[-1]
-        st.session_state["lead_day"] = k          # set before the timeline widget exists in this run
-        timeline_widget()
-    draw(k, interactive=True)
+    # ---- side panel facts for the timeline day: place value, spread story, fade, check against the real day
+    lines = []
+    pv = view_field(run, ch, k, "shocked")
+    bv = view_field(run, ch, k, "base")
+    v_s = float(plots.to_display(ch, pv)[pi, pj])
+    v_b = float(plots.to_display(ch, bv)[pi, pj])
+    extra = f" (no shock {_fmt_num(v_b)})" if shocked_run and abs(v_s - v_b) > 1e-9 else ""
+    lines.append(f"<b>{html.escape(plabel[:1].upper() + plabel[1:])}</b>: {_fmt_num(v_s)} {du}{extra}")
+    if shocked_run and k >= 1:
+        lines.append(html.escape(describe_spread(eff[:min(steps, len(eff))], box, lats, lons, k)))
+    if shocked_run:
+        lines.append(html.escape(fade_summary(eff, box, du, lats, lons)))
+    obs = view_field(run, ch, k, "observed")
+    if k >= 1 and obs is not None:
+        cmp = compare_observed(plots.to_display(ch, bv), plots.to_display(ch, obs))
+        lines.append(f"Against the real day (no shock): peak <b>{_fmt_num(cmp['peak_pred'])}</b> vs "
+                     f"<b>{_fmt_num(cmp['peak_obs'])} {du}</b> observed; detail kept "
+                     f"<b>{cmp['detail_pct']:.0f}%</b> of the real variation (100% = no blur); typical error "
+                     f"<b>{_fmt_num(cmp['rmse'])} {du}</b>.")
+    elif k >= 1:
+        lines.append("<span class='mm-quiet'>No observed weather in the archive for this day.</span>")
+    t = run.timings_ms or {}
+    calls = (f"Two live calls: {_fmt_ms(t.get('base_rt'))} and {_fmt_ms(t.get('shock_rt'))}; "
+             f"{shock_cells(run.perturbation)} cells shocked, {shock_txt}." if shocked_run else
+             f"One live call: {_fmt_ms(t.get('base_rt'))}; no shock painted.")
+    lines.append(f"<span class='mm-quiet'>{calls}</span>")
+    info_ph.markdown("<div class='mm-facts'>" + "".join(f"<p>{x}</p>" for x in lines) + "</div>",
+                     unsafe_allow_html=True)
 
     # ---- below the fold: the shock's effect day by day, side by side, and the forecast at one place
     if shocked_run:
         st.markdown(f"#### How the shock spreads, day by day ({ch})")
         n = min(steps, 10)
-        sel = min(max(k, 1), n)
-        strip = plots.diff_strip(eff[:n], lats, lons, "Δ " + du, box=box, selected=sel, height=STRIP_HEIGHT,
-                                 coast=coast)
+        strip = plots.diff_strip(eff[:n], lats, lons, "Δ " + du, box=box, selected=k, height=STRIP_HEIGHT,
+                                 coast=coast, days=STRIP_DAYS)
         st.plotly_chart(strip, key="maps_strip", on_select=_on_strip_click, selection_mode="points", config=NO_BAR,
                         theme=None)
     with st.expander("Side by side for this day: no shock, with shock, difference", expanded=False):

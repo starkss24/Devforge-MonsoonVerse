@@ -49,6 +49,22 @@ def _run_ensemble(ctx, frac: float, use_shock: bool, n_members: int = N_MEMBERS)
     }
 
 
+def spread_caption(sp: np.ndarray, frac: float) -> str:
+    """Says what the spread curve actually does (from the live ensemble), instead of a fixed claim."""
+    s = np.nanmean(np.asarray(sp, float), axis=1)          # mean over channels, per lead day
+    first, last = float(s[0]), float(s[-1])
+    if last < 0.8 * first:
+        trend = (f"Here the spread shrinks from {first:.3f} on day 1 to {last:.3f} on day {len(s)} (channel std): "
+                 "the model damps small starting differences instead of amplifying them as real weather would, "
+                 "so this spread is not a calibrated forecast uncertainty.")
+    elif last > 1.25 * first:
+        trend = (f"Here the spread grows from {first:.3f} on day 1 to {last:.3f} on day {len(s)} (channel std): small "
+                 "starting differences are amplified with lead time, as in real weather.")
+    else:
+        trend = (f"Here the spread stays about level ({first:.3f} on day 1, {last:.3f} on day {len(s)}, channel std).")
+    return f"{trend} Input noise was {frac:.3f} of each channel's std (dotted line)."
+
+
 def render(ctx) -> None:
     st.subheader("Ensemble: how sure is the forecast?")
     st.markdown("The server is deterministic, so we nudge the 3 starting days with tiny random noise and make one "
@@ -117,5 +133,4 @@ def render(ctx) -> None:
     fig.update_yaxes(range=[0, 1.3 * max(float(np.nanmax(sp)), ens["frac"])])
     st.plotly_chart(fig, key="ens_spread_line", config=NO_BAR, theme=None)
 
-    st.caption("Flat near the input noise level: the model damps small errors. Growing with lead day: small "
-               "starting differences are amplified, as in real weather.")
+    st.caption(spread_caption(sp, ens["frac"]))

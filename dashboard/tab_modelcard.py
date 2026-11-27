@@ -189,7 +189,16 @@ def _render_limits(backend: str) -> None:
         "**Skill falls with lead time**: day-1 forecasts are much closer to the truth than day-8 ones; beyond "
         "about a week, climatology is a hard reference to beat.",
         "**Ensemble spread is dashboard-made**: the server is deterministic, so spread only reflects the input "
-        "noise the Ensemble tab adds, not a calibrated probability.",
+        "noise the Ensemble tab adds, not a calibrated probability (on this model it shrinks with lead day).",
+        "**monsoon_stall rarely spreads** (about 5 of 20 windows, raw model too): a weakened wind field decays "
+        "instead of travelling. Expect to lose about 2 causality points on windows where it fails.",
+        "**Moisture (tcwv) shocks can leak a little energy far from the box on day 1** (teleport check fails on "
+        "some west-coast windows).",
+        "**Temperature beyond about day 5 leans on climatology** (blend capped at 0.5), so long-range shock "
+        "effects are damped by up to half.",
+        "**Rain peaks are smoothed**: the ensemble averages two models, so single heavy-rain peaks come out "
+        "lower than observed (check the Maps tab's 'against the real day' line for any date).",
+        "**Scores vary by about ±1–2 points** between windows and seeds; the judges use 5 windows.",
         f"**Current backend**: `{backend}`"
         + (" — the persistence stub, not a trained model. Shock responses stay inside the box and do not travel."
            if "persist" in str(backend).lower() else "."),
