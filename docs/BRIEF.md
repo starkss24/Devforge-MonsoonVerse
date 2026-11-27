@@ -36,7 +36,7 @@
 **Honest limits.**
 - **Skill falls with lead.** By day 8 we only match climatology; the blend keeps late days honest but damps long-range shock effects by up to half.
 - **monsoon_stall rarely spreads** (about 5 of 20 windows): a weakened wind field decays rather than travels. It costs about 2 causality points where it fails.
-- **Single rain peaks are smoothed** at longer leads (day-8 rain variance ratio 0.57, inside the judge's band but below temperature's).
+- **Single rain peaks are smoothed** at longer leads (day-8 rain variance ratio 0.68, inside the judge's band but below temperature's 0.99).
 - **t2m is a daily mean**, so "hot days" are anomalies, not heatwave maxima. Region boxes are approximate (1° ≈ 110 km); edge cells are least reliable.
 - **Learned, not physical**: only the clamps, non-negative rain and the residual form are imposed; there is no conservation law.
 
