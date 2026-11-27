@@ -6,6 +6,7 @@
 |---|---|
 | [brief.pdf](brief.pdf) / [BRIEF.md](BRIEF.md) | The two-page brief for the judges (PDF built from the Markdown with `python docs/build_brief_pdf.py`) |
 | [PROJECT_EXPLAINED.md](PROJECT_EXPLAINED.md) | The whole project in plain words: problem, data, model, results, shocks, limits, glossary |
+| [PITCH_GUIDE.md](PITCH_GUIDE.md) | Pitch prep: 60-second pitch, 2/5/10-minute scripts, 47 likely judge questions with answers, numbers to memorise |
 | [DEMO_SCRIPT.md](DEMO_SCRIPT.md) | What to click and say in the live demo |
 | [JUDGE_QA.md](JUDGE_QA.md) | Likely judge questions with short, honest answers |
 
