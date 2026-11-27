@@ -11,3 +11,5 @@ eval/*.json
 /*.pdf
 .claude/settings.local.json
 export/
+# the organisers' team playbook (never committed, wherever it is saved)
+*Playbook*.pdf

@@ -275,7 +275,8 @@ def test_app_live_warm_ocean_run(live_server):
     at.run()
     assert not at.exception
     assert any("Run the twin" in i.value for i in at.info)  # instructions before the first run
-    assert at.segmented_control(key="channel").value == "tp"
+    assert at.radio(key="shock_preset").value == sidebar.DEFAULT_PRESET == "heatwave"   # first load: clearest demo
+    assert at.segmented_control(key="channel").value == sidebar.DEFAULT_CHANNEL == "t2m"
     assert at.select_slider(key="lead_day").value == 1
 
     at.text_input(key="server_url").set_value(live_server).run()

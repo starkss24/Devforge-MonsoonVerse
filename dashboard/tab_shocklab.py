@@ -96,6 +96,8 @@ def verdict(chk: dict, is_persistence: bool) -> str:
     spread = f"Spreads outward by day 4–8: {_mark(chk['propagates'])}"
     if not chk["propagates"] and is_persistence:
         spread += " (persistence stub does not move)"
+    elif not chk["propagates"]:
+        spread += " (in this model the response stays near the box for this shock and window)"
     return f"{loc}. {spread}"
 
 

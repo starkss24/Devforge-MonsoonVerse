@@ -224,6 +224,27 @@ def describe_spread(diffs, box, lats, lons, day: int) -> str:
     return f"Day {day}: {area}; {where}."
 
 
+def fade_summary(effect, box, units: str, lats, lons) -> str:
+    """Live sentence about the change inside the shock box: mean change on days 1, 4, 8 (as available) and the first
+    day it drops below a tenth of day 1, from the fetched rollouts (no hard-coded model claims)."""
+    if box is None:
+        return ""
+    from common import box_mask
+    m = box_mask(*box)
+    e = np.asarray(effect, dtype=float)
+    if not m.any() or e.ndim != 3:
+        return ""
+    series = np.array([float(np.nanmean(e[d][m])) for d in range(e.shape[0])])
+    d1 = series[0]
+    if abs(d1) < plots.ZERO_DIFF:
+        return "Inside the box the change is too small to measure on day 1."
+    parts = [f"day {d} {series[d - 1]:+.2f}" for d in (1, 4, 8) if d <= len(series)]
+    below = np.where(np.abs(series) < 0.1 * abs(d1))[0]
+    fade = (f"it falls below a tenth of day 1 on day {int(below[0]) + 1}" if below.size else
+            f"it does not fade within {len(series)} days")
+    return f"Inside the box: {', '.join(parts)} {units}; {fade}."
+
+
 def probe_options() -> list[str]:
     return [BOX_CENTRE, *CITIES, CLICKED]
 
@@ -430,6 +451,8 @@ def render(ctx) -> None:
             lines.append(f"<b>{html.escape(plabel[:1].upper() + plabel[1:])}</b>: {_fmt_num(v_s)} {du}{extra}")
         if shocked_run and day >= 1:
             lines.append(html.escape(describe_spread(eff[:min(steps, len(eff))], box, lats, lons, day)))
+        if shocked_run:
+            lines.append(html.escape(fade_summary(eff, box, du, lats, lons)))
         obs = view_field(run, ch, day, "observed")
         if day >= 1 and obs is not None:
             cmp = compare_observed(plots.to_display(ch, bv), plots.to_display(ch, obs))

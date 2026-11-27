@@ -111,6 +111,8 @@ def test_verdict_and_scorecard_helpers():
     assert "100% of energy within 3 cells ✓" in v and "Spreads outward by day 4–8: ✗" in v
     assert "persistence stub does not move" in v
     assert "persistence" not in tab_shocklab.verdict({**chk, "propagates": True}, is_persistence=True)
+    real = tab_shocklab.verdict(chk, is_persistence=False)          # a real model that does not spread says so
+    assert "Spreads outward by day 4–8: ✗" in real and "stays near the box" in real and "stub" not in real
     rows = tab_shocklab.checks_rows(chk)
     assert [r[""] for r in rows] == ["✓", "✓", "✗", "✓", "✓"]
     sc = tab_modelcard.scorecard([{"lead": "1", "ss": "0.1"}, {"lead": "1", "ss": "-0.3"},

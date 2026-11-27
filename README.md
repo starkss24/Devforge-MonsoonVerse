@@ -39,7 +39,7 @@ the impact maths is in [docs/IMPACT.md](docs/IMPACT.md).
 
 ## API
 
-- `POST /health` → `{"status": "ready", "model_name": ..., "backend": "persistence" | "model"}`
+- `POST /health` → `{"status": "ready", "model_name": ..., "backend": "onnx" | "torchscript" | "persistence", "post": "loaded" | "absent" | ..., "load_error": ...}`
 - `POST /simulate` with `{"init_states": [3,6,32,36], "doy_sincos": [sin, cos], "steps": 10, "perturbation": null | [6,32,36]}`
   → `{"rollout": [steps,6,32,36], "inference_ms": ...}`. Physical units; channels t2m, tp, u10, v10, msl, tcwv.
 

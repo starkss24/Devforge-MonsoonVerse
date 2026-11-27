@@ -43,17 +43,20 @@ DEMO_SHOCKS = {
     "westerly_burst": dict(channel="u10", mode="absolute", mag=5.0, box=(10.5, 18.5, 65.5, 73.5)),
     "bay_low": dict(channel="msl", mode="absolute", mag=-1500.0, box=(15.5, 20.5, 85.5, 90.5)),
 }
-# What to expect, in plain words (measured by the model lane / by our shock tests on the final model).
+# What is painted, in plain words. Deliberately no claims about what the model will do: that is measured live on
+# the Maps tab from the fetched rollouts (tab_maps.fade_summary / describe_spread), so it stays true when the
+# weights change.
 PRESET_EXPECT = {
-    "warm_ocean": "Scored by the judges. Stays local on day 1, then spreads.",
-    "monsoon_stall": "Scored by the judges. Stays local but spreads little: the model's known weak spot.",
-    "heatwave": "Local on day 1, spreads, fades by day 8.",
-    "westerly_burst": "Local on day 1, spreads, fades by day 8.",
-    "bay_low": "Very strong rain response (up to +55 mm/day). Switch the display to precipitation to see it.",
+    "warm_ocean": "One of the two shocks the judges score.",
+    "monsoon_stall": "One of the two shocks the judges score.",
+    "heatwave": "A hot spell over north India.",
+    "westerly_burst": "Stronger west-to-east winds over the Arabian Sea.",
+    "bay_low": "A low-pressure system; the map switches to rain, where its effect shows.",
 }
+DEFAULT_PRESET = "heatwave"     # first load: the clearest "starts local, then spreads" demo (model lane, 20/20 windows)
 # Display channel picked automatically when a preset shock is chosen (the user can change it afterwards).
 SHOCK_CHANNEL = {"warm_ocean": "t2m", "monsoon_stall": "u10", "heatwave": "t2m", "westerly_burst": "u10",
-                 "bay_low": "msl"}
+                 "bay_low": "tp"}
 # A click on a map turns the current shock into a custom box of the same kind, centred on the click.
 CLICK_AS_CUSTOM = {"none": ("t2m", "absolute", 3.0, 11), "warm_ocean": ("t2m", "absolute", 3.0, 11),
                    "monsoon_stall": ("u10", "percent", -40.0, 11),
@@ -63,7 +66,7 @@ HORIZONS = (10, 15, 20)                  # forecast days; the judges score 10, b
 CUSTOM_DEFAULTS = {"t2m": 3.0, "tp": 10.0, "u10": -3.0, "v10": -3.0, "msl": -300.0, "tcwv": 5.0}
 CHANNEL_NAMES = {"t2m": "2 m temperature", "tp": "Precipitation", "u10": "10 m wind (east-west)",
                  "v10": "10 m wind (north-south)", "msl": "Sea-level pressure", "tcwv": "Column water vapour"}
-DEFAULT_CHANNEL = "tp"
+DEFAULT_CHANNEL = SHOCK_CHANNEL[DEFAULT_PRESET]
 
 
 def channel_label(ch: str) -> str:
@@ -208,6 +211,7 @@ def render_sidebar(arc, status_slot=None, display=None) -> Controls:
     if last_day != str(picked):
         window.caption(f"{picked} is not in the archive, so the window ends on {last_day} instead.")
 
+    st.session_state.setdefault("shock_preset", DEFAULT_PRESET)
     preset = painter.radio("Shock painter", PRESETS, format_func=lambda p: PRESET_TEXT[p], key="shock_preset",
                            on_change=_on_preset_change)
     win = get_window(arc, last_day)

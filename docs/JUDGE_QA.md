@@ -40,7 +40,7 @@ We split by year: train 2005–2018, validate 2019–2021. We never split by ran
 It shows how sensitive the forecast is to small errors in the starting state. The dashboard adds tiny noise (default 0.5% of channel std) to the 3 start days and makes 8 live calls. The server itself stays deterministic. It is not a calibrated probability, and the model card says so.
 
 **How fast is it on CPU?**
-A 10-step rollout on the persistence backend takes about 100 ms. The final model (two 2 M-parameter U-Nets, onnx) takes about 50 ms on 4 threads, about 0.1 s per call including JSON. The judge's limit is 5 s on 4 cores. `[TO CONFIRM: Vishwak]` on the final machine. The model loads and warms up before `/health` says ready, so no scored call pays the start-up cost.
+A 10-step rollout on the persistence backend takes about 100 ms. The final model (two 2 M-parameter U-Nets, onnx) takes about 50 ms on 4 threads, about 0.1 s per call including JSON. The judge's limit is 5 s on 4 cores. Measured through `serve.py` on our Windows laptop: about 80 ms per 10-day rollout on the server, 0.16 s per call including JSON and HTTP, `/health` ready in 4-7 s. The model loads and warms up before `/health` says ready, so no scored call pays the start-up cost.
 
 **Why predict the change rather than the full next day?**
 Day-to-day changes are small next to the fields themselves, so predicting the change is an easier learning problem. It also makes the model start from persistence, which is the strong baseline at day 1. Each change is normalised per channel by the spread of its own day-to-day changes, so rain and pressure count equally (rain then gets double weight in the loss, because heavy rain is scored separately).

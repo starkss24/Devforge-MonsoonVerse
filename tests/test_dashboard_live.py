@@ -104,6 +104,23 @@ def test_point_series_figure():
     assert len(fig.data[2].x) == 7 and fig.layout.shapes[0].line.color == plots.TURMERIC
 
 
+def test_fade_summary_is_measured_not_claimed():
+    box = (8.5, 19.5, 82.5, 93.5)
+    m = box_mask(*box)
+    eff = np.zeros((10, 32, 36))
+    for d, v in enumerate([3.0, 2.5, 2.0, 1.5, 1.0, 0.6, 0.25, 0.2, 0.1, 0.05]):
+        eff[d][m] = v
+    s = tab_maps.fade_summary(eff, box, "K", LATS, LONS)
+    assert "day 1 +3.00, day 4 +1.50, day 8 +0.20 K" in s and "below a tenth of day 1 on day 7" in s     # 0.25 < 3.0 / 10
+    eff2 = np.zeros((10, 32, 36)); eff2[:, m] = 2.0
+    assert "does not fade within 10 days" in tab_maps.fade_summary(eff2, box, "K", LATS, LONS)
+    assert tab_maps.fade_summary(eff2, None, "K", LATS, LONS) == ""
+    # preset texts describe what is painted, never what the model does
+    for t in sidebar.PRESET_EXPECT.values():
+        assert not any(w in t.lower() for w in ("fades", "spreads", "mm/day", "local on day"))
+    assert sidebar.SHOCK_CHANNEL["bay_low"] == "tp"                  # the low's effect shows in rain
+
+
 def test_describe_spread():
     diffs = np.zeros((10, 32, 36))
     box = (8.5, 19.5, 82.5, 93.5)
@@ -217,7 +234,7 @@ def test_app_live_mode_runs_without_the_button(live_server):
     assert [e.value for e in at.error] and all(e.value.startswith("Server down") for e in at.error)  # status only
     assert at.toggle(key="live_mode").value is True           # Live is on by default
     at.text_input(key="server_url").set_value(live_server).run()
-    assert not at.exception and at.session_state["run"].shock_label == "none"   # first run, no click
+    assert not at.exception and at.session_state["run"].shock_label == sidebar.DEFAULT_PRESET  # first run, no click
     for preset in ("warm_ocean", "heatwave"):
         at.radio(key="shock_preset").set_value(preset).run()
         assert not at.exception and not at.error, [e.value for e in at.error]

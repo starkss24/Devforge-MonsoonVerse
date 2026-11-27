@@ -1,6 +1,6 @@
 # Multiverse of Monsoon, Track 2: a learned digital twin of Indian daily weather
 
-*Draft. `[TO CONFIRM: …]` = owner confirms. Model facts and results confirmed by Aether for `aether-unet-v2-ens2` (if the team keeps `aether-unet-e5b`, use its numbers from `docs/MODEL_V2.md`: 65.8 of 70, 55.3 on 2023, single U-Net, blend not capped).*
+*Draft. Model facts and results confirmed by Aether for `aether-unet-v2-ens2` and re-measured through `serve.py` by Vishwak on 2026-11-27 (67.06 of 70 on 100 held-out windows, identical to the model lane). The previous model, `aether-unet-e5b`, scored 65.8 of 70 and 55.3 on 2023 (single U-Net, blend not capped; see `docs/MODEL_V2.md`).*
 
 ## Page 1: model design, drift and blur, failure modes
 
@@ -59,6 +59,6 @@
 **Impact use case: crop stress.** For six approximate farming-region boxes (land only), the Impact tab turns both rollouts into the 10-day rain deficit (%) against the 2005–2018 climatology and the count of hot days (daily-mean t2m anomaly above a slider, default 2 K). A 0–100 index combines them (0.6 × deficit + 0.4 × hot-day share), baseline → shocked. On the persistence stub, warm_ocean at 2.5 K lifts the East coast index from 47 to 87; monsoon_stall gives Δ = 0. Tests use hand-computed numbers.
 
 **Engineering.**
-- **Fast.** A 10-step rollout takes ~100 ms (persistence backend) and ~60 ms for a 2.1M-parameter test conv net on 4 CPU threads. The judge's limit is 5 s. Final model: about 50 ms per 10-day rollout (onnx, 4 threads, measured by the model lane) `[TO CONFIRM: Vishwak]`.
+- **Fast.** A 10-step rollout takes ~100 ms (persistence backend) and ~60 ms for a 2.1M-parameter test conv net on 4 CPU threads. The judge's limit is 5 s. Final model: about 50 ms of model compute per 10-day rollout (onnx, 4 threads, model lane); measured through `serve.py` on our Windows laptop, about 80 ms per rollout on the server and 0.16 s per call including JSON and HTTP, with `/health` ready 4-7 s after start (Vishwak, 2026-11-27).
 - **Offline-safe.** `serve.py` imports only libraries on the sandbox list and never the kit or dashboard libraries. The weights are inside the repo, and the server writes nothing to disk. The model loads and warms up before `/health` reports ready.
 - **Tested.** 93 automated tests cover the server, the twin, the scorer, the shocks and the dashboard. We also run the organisers' schema validator, a repo scan and a clean-clone script.
