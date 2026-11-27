@@ -104,6 +104,13 @@ div[data-testid="stDataFrame"] { font-stretch: 87.5%; }
 .mm-readout .mm-quiet { color: var(--muted); }
 .mm-meta { font-size: 0.98rem; color: var(--ink); margin: 0; }
 .mm-story { font-size: 1.02rem; color: var(--ink); margin: 0.15rem 0 0 0; }
+/* three-step guide above the map: one line, numbered, plain */
+ol.mm-guide { display: flex; flex-wrap: wrap; gap: 0.2rem 1.4rem; margin: 0 0 -0.2rem 0; padding: 0;
+              list-style: none; counter-reset: step; color: var(--ink); font-size: 0.98rem; }
+ol.mm-guide li { counter-increment: step; margin: 0; }
+ol.mm-guide li::before { content: counter(step); display: inline-block; width: 1.35rem; height: 1.35rem;
+              margin-right: 0.4rem; border-radius: 50%; background: var(--blue); color: #fff; font-weight: 700;
+              font-size: 0.85rem; text-align: center; line-height: 1.35rem; }
 .mm-pill-detail { font-weight: 500; margin-left: 0.35rem; color: var(--muted); }
 section[data-testid="stSidebar"] .mm-pill-detail { color: #C9D5DF; }
 .mm-chip { margin-left: 0.6rem; font-size: 0.85rem; font-weight: 600; color: var(--blue); padding: 0.1rem 0.55rem;

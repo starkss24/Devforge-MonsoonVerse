@@ -342,3 +342,12 @@ def test_status_pill_details():
     ok = sidebar.status_pill({"model_name": "m", "backend": "onnx", "post": "loaded"}, None, 157.4)
     assert "Server ready, running m" in ok and "onnx, post-processing on, 157 ms" in ok
     assert "post-processing on" not in sidebar.status_pill({"model_name": "m", "backend": "onnx", "post": "absent"})
+
+
+def test_guide_and_effect_key():
+    assert tab_maps.GUIDE_HTML.count("<li>") == 3 and "Press Play" in tab_maps.GUIDE_HTML
+    fr = tab_maps.map_frames(_fake_run(), "t2m", "effect", tab_maps.timeline_days(10), (8.5, 12.5, 70.5, 74.5),
+                             "°C", LATS, LONS)
+    assert all("Red = the shock raised it" in f for f in fr["facts"])
+    plain = tab_maps.map_frames(_fake_run(), "t2m", "base", tab_maps.timeline_days(10), None, "°C", LATS, LONS)
+    assert not any("Red =" in f for f in plain["facts"])

@@ -44,7 +44,7 @@ def wants_run(controls, run, health, live: bool) -> bool:
     return bool(live) and health is not None and (run is None or is_stale(controls, run))
 
 
-MAP_HEIGHT = 540       # px; the big map incl. Play / speed / day slider under it, at 1280x720
+MAP_HEIGHT = 500       # px; the big map incl. Play / speed / day slider, visible without scrolling at 1280x720
 PANEL_HEIGHT = 304     # px; each of the side-by-side maps
 STRIP_HEIGHT = 170     # px; six maps in one row (days 1, 2, 4, 6, 8, 10)
 STRIP_DAYS = (1, 2, 4, 6, 8, 10)
@@ -57,6 +57,9 @@ LAYER_TEXT = {"tp": "Rain", "t2m": "Temperature", "u10": "Wind east–west", "v1
               "msl": "Pressure", "tcwv": "Moisture"}
 VIEWS = ("shocked", "base", "effect", "observed")
 VIEW_TEXT = {"shocked": "With shock", "base": "No shock", "effect": "Effect", "observed": "Observed"}
+GUIDE_HTML = ("<ol class='mm-guide'><li><b>Pick a shock</b> or click the map</li>"
+              "<li><b>The twin forecasts</b> it live</li>"
+              "<li><b>Press Play</b> and watch it spread from the gold box</li></ol>")
 CLICK_MOVE, CLICK_PROBE = "move", "probe"
 CLICK_TEXT = {CLICK_MOVE: "Click moves the shock", CLICK_PROBE: "Click charts a place"}
 BOX_CENTRE, CLICKED = "Shock box centre", "Clicked point"
@@ -265,6 +268,8 @@ def map_frames(run, ch: str, view: str, days, box, du: str, lats, lons) -> dict:
             facts = [f"Largest {'change' if is_eff else 'value'}: {_fmt_num(float(np.nanmax(np.abs(z) if is_eff else z)))} {du}"]
             if m is not None and m.any() and (is_eff or view == "shocked"):
                 facts.append(f"Shock effect inside the box: {float(np.nanmean(e[m])):+.2f} {du}")
+            if is_eff:
+                facts.append("Red = the shock raised it, blue = lowered it")
         out["z"].append(z)
         out["facts"].append("<br>".join(facts))
         out["effect"].append(e)
@@ -356,6 +361,7 @@ def render(ctx) -> None:
     st.session_state.setdefault("map_view", "shocked")
     st.session_state.setdefault("click_mode", CLICK_MOVE)
     st.session_state.setdefault("probe_place", BOX_CENTRE)
+    st.markdown(GUIDE_HTML, unsafe_allow_html=True)
     _layer_row()
 
     left, right = st.columns([1.2, 0.8], gap="medium")
